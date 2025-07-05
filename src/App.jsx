@@ -131,10 +131,12 @@ export default function App() {
   return (
     <div className="app-root">
       <div className="main-header">
-        <h1>烘豆 <span className="accent">ROR</span> 預測工具</h1>
+        <h1>
+          烘豆 <span className="accent">ROR</span> 預測工具
+        </h1>
       </div>
       <form
-        onSubmit={e => {
+        onSubmit={(e) => {
           e.preventDefault();
           handleGenerate();
         }}
@@ -143,95 +145,241 @@ export default function App() {
         <div className="form-grid-2col">
           <div className="form-row">
             <label>回溫點時間（秒）</label>
-            <input type="number" value={startTime} onChange={e => setStartTime(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={startTime}
+              onChange={(e) =>
+                setStartTime(
+                  e.target.value === '' ? '' : Number(e.target.value)
+                )
+              }
+              min={0}
+            />
           </div>
           <div className="form-row">
             <label>回溫點溫度（°C）</label>
-            <input type="number" value={startTemp} onChange={e => setStartTemp(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={startTemp}
+              onChange={(e) =>
+                setStartTemp(
+                  e.target.value === '' ? '' : Number(e.target.value)
+                )
+              }
+              min={0}
+            />
           </div>
           <div className="form-row">
             <label>一爆目標時間（秒）</label>
-            <input type="number" value={targetTime} onChange={e => setTargetTime(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={targetTime}
+              onChange={(e) =>
+                setTargetTime(
+                  e.target.value === '' ? '' : Number(e.target.value)
+                )
+              }
+              min={0}
+            />
           </div>
           <div className="form-row">
             <label>一爆目標溫度（°C）</label>
-            <input type="number" value={targetTemp} onChange={e => setTargetTemp(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={targetTemp}
+              onChange={(e) =>
+                setTargetTemp(
+                  e.target.value === '' ? '' : Number(e.target.value)
+                )
+              }
+              min={0}
+            />
           </div>
           <div className="form-row">
             <label>初始 ROR（°C/分）</label>
-            <input type="number" value={startROR} onChange={e => setStartROR(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={startROR}
+              onChange={(e) =>
+                setStartROR(e.target.value === '' ? '' : Number(e.target.value))
+              }
+              min={0}
+            />
           </div>
           <div className="form-row">
             <label>一爆目標 ROR（°C/分）</label>
-            <input type="number" value={targetROR} onChange={e => setTargetROR(e.target.value === '' ? '' : Number(e.target.value))} min={0} />
+            <input
+              type="number"
+              value={targetROR}
+              onChange={(e) =>
+                setTargetROR(
+                  e.target.value === '' ? '' : Number(e.target.value)
+                )
+              }
+              min={0}
+            />
           </div>
         </div>
-  
-        <div className="unit-row">
-          <input type="checkbox" checked={showPerMinute} id="unit-switch" onChange={() => setShowPerMinute(!showPerMinute)} />
-          <label htmlFor="unit-switch" style={{ margin: 0 }}>顯示單位：<b>{showPerMinute ? "°C/分" : "°C/30秒"}</b></label>
+
+        
+        <div className="unit-row" style={{ gridColumn: '1 / -1' }}>
+          <input
+            type="checkbox"
+            checked={showPerMinute}
+            id="unit-switch"
+            onChange={() => setShowPerMinute(!showPerMinute)}
+            style={{ marginRight: 5 }}
+          />
+          <label htmlFor="unit-switch" style={{ margin: 0 }}>
+            顯示單位：<b>{showPerMinute ? '°C/分' : '°C/30秒'}</b>
+          </label>
         </div>
-  
-        <button className="gen-btn" type="submit">產生預測曲線表格</button>
+
+        <button className="gen-btn" type="submit">
+          產生預測曲線表格
+        </button>
       </form>
-  
+
       <div className="card">
         <div className="row-flex" style={{ gap: 12 }}>
           <div style={{ flex: 1 }}>
             <label>實際時間（秒）</label>
-            <input type="number" value={actualTime} onChange={e => setActualTime(e.target.value)} min={0} />
+            <input
+              type="number"
+              value={actualTime}
+              onChange={(e) => setActualTime(e.target.value)}
+              min={0}
+            />
           </div>
           <div style={{ flex: 1 }}>
             <label>實際溫度（°C）</label>
-            <input type="number" value={actualTemp} onChange={e => setActualTemp(e.target.value)} min={0} />
+            <input
+              type="number"
+              value={actualTemp}
+              onChange={(e) => setActualTemp(e.target.value)}
+              min={0}
+            />
           </div>
-          <button className="gen-btn" style={{ flex: 1, minWidth: 120 }} onClick={handleAddActual} type="button">
+          <button
+            className="gen-btn"
+            style={{ flex: 1, minWidth: 120 }}
+            onClick={handleAddActual}
+            type="button"
+          >
             加入實際紀錄
           </button>
         </div>
-  
+
         {profile.length > 0 && (
           <>
-            <div className="chart-container" style={{ height: 320, margin: "22px 0 0 0" }}>
-              <div style={{ marginBottom: 10, fontWeight: 600, fontSize: "1.13rem", color: "#b95b16" }}>
+            <div
+              className="chart-container"
+              style={{ height: 320, margin: '22px 0 0 0' }}
+            >
+              <div
+                style={{
+                  marginBottom: 10,
+                  fontWeight: 600,
+                  fontSize: '1.13rem',
+                  color: '#b95b16',
+                }}
+              >
                 預測溫度曲線視覺對照
               </div>
               <ResponsiveContainer width="100%" height="80%">
                 <LineChart data={chartData}>
                   <XAxis dataKey="time" minTickGap={15} />
-                  <YAxis yAxisId="left" label={{ value: "溫度 (°C)", angle: -90, position: "insideLeft" }} domain={[dataMin => Math.floor(dataMin - 3), dataMax => Math.ceil(dataMax + 3)]} allowDecimals={true} />
-                  <YAxis yAxisId="right" orientation="right" label={{ value: "ROR (°C/分)", angle: 90, position: "insideRight" }} domain={[dataMin => Math.floor(dataMin - 5), dataMax => Math.ceil(dataMax + 5)]} allowDecimals={true} />
+                  <YAxis
+                    yAxisId="left"
+                    label={{
+                      value: '溫度 (°C)',
+                      angle: -90,
+                      position: 'insideLeft',
+                    }}
+                    domain={[
+                      (dataMin) => Math.floor(dataMin - 3),
+                      (dataMax) => Math.ceil(dataMax + 3),
+                    ]}
+                    allowDecimals={true}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    label={{
+                      value: 'ROR (°C/分)',
+                      angle: 90,
+                      position: 'insideRight',
+                    }}
+                    domain={[
+                      (dataMin) => Math.floor(dataMin - 5),
+                      (dataMax) => Math.ceil(dataMax + 5),
+                    ]}
+                    allowDecimals={true}
+                  />
                   <Tooltip />
                   <Legend />
-                  <Line yAxisId="left" type="monotone" dataKey="預測溫度" stroke="#b95b16" strokeWidth={3} dot={false} />
-                  <Line yAxisId="left" type="monotone" dataKey="實際溫度" stroke="#0b4d91" strokeWidth={2} dot={{ r: 4 }} isAnimationActive={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="預測ROR" stroke="#8884d8" strokeWidth={2} dot={false} />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="預測溫度"
+                    stroke="#b95b16"
+                    strokeWidth={3}
+                    dot={false}
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="實際溫度"
+                    stroke="#0b4d91"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="預測ROR"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
-              <div className="meta-info" style={{ margin: "10px 0 0 0", fontSize: 14 }}>
-                最終溫度誤差：{finalTempError?.toFixed(2)}°C，最終 ROR 誤差：{finalRORError?.toFixed(2)}°C/分
+              <div
+                className="meta-info"
+                style={{ margin: '10px 0 0 0', fontSize: 14 }}
+              >
+                最終溫度誤差：{finalTempError?.toFixed(2)}°C，最終 ROR 誤差：
+                {finalRORError?.toFixed(2)}°C/分
               </div>
             </div>
-  
+
             <div style={{ marginTop: 18 }}>
-              <table className="data-table" style={{ width: "100%" }}>
+              <table className="data-table" style={{ width: '100%' }}>
                 <thead>
                   <tr>
                     <th>時間</th>
                     <th>預測溫度（°C）</th>
-                    <th>預測升溫速率（{showPerMinute ? "°C/分" : "°C/30秒"})</th>
+                    <th>
+                      預測升溫速率（{showPerMinute ? '°C/分' : '°C/30秒'})
+                    </th>
                     <th>實際溫度（若有）</th>
                   </tr>
                 </thead>
                 <tbody>
                   {profile.map((row, i) => {
-                    const actual = actuals.find(a => a.time === row.time);
+                    const actual = actuals.find((a) => a.time === row.time);
                     return (
                       <tr key={i}>
                         <td>{row.time}</td>
                         <td>{row.temperature}</td>
-                        <td>{(showPerMinute ? parseFloat(row.ror) : parseFloat(row.ror) / 2).toFixed(1)}</td>
-                        <td>{actual?.temperature || ""}</td>
+                        <td>
+                          {(showPerMinute
+                            ? parseFloat(row.ror)
+                            : parseFloat(row.ror) / 2
+                          ).toFixed(1)}
+                        </td>
+                        <td>{actual?.temperature || ''}</td>
                       </tr>
                     );
                   })}
@@ -243,5 +391,4 @@ export default function App() {
       </div>
     </div>
   );
-  
 }

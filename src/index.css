@@ -250,3 +250,16 @@ button:hover {
     padding: 11px 0;
   }
 }
+.unit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 18px 0;
+  color: var(--header-txt);
+  font-weight: 600;
+  font-size: 1em;
+  opacity: 0.97;
+  /* 保證不會掉到右邊 */
+  width: fit-content;
+  justify-self: start;
+}
