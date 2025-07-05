@@ -134,7 +134,15 @@ export default function App() {
       {/* 樣式放最上層，避免跨檔案，直接 copy paste 用 */}
       <style>{`
       body, .app-root, input, button, label, table, th, td {
-        font-family: 'Inter', 'Noto Sans TC', Arial, '微軟正黑體', 'PingFang TC', 'Heiti TC', 'sans-serif' !important;
+        font-family:
+          'Noto Sans TC',
+          'PingFang TC',
+          'Microsoft JhengHei',
+          'Heiti TC',
+          'Segoe UI',
+          Arial,
+          Inter,
+          sans-serif !important;
         font-weight: 400;
         letter-spacing: 0.02em;
       }
