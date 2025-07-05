@@ -9,13 +9,6 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-// Google Fonts 動態加載
-const fontLink = document.createElement('link');
-fontLink.href =
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Noto+Sans+TC:wght@400;700&display=swap';
-fontLink.rel = 'stylesheet';
-document.head.appendChild(fontLink);
-
 function formatTime(seconds) {
   const min = Math.floor(seconds / 60);
   const sec = seconds % 60;
@@ -85,12 +78,12 @@ function calculateSmoothProfile({
 
 export default function App() {
   // 狀態欄
-  const [startTime, setStartTime] = useState();
-  const [startTemp, setStartTemp] = useState();
-  const [targetTime, setTargetTime] = useState();
-  const [targetTemp, setTargetTemp] = useState();
-  const [startROR, setStartROR] = useState();
-  const [targetROR, setTargetROR] = useState();
+  const [startTime, setStartTime] = useState(60);
+  const [startTemp, setStartTemp] = useState(100);
+  const [targetTime, setTargetTime] = useState(450);
+  const [targetTemp, setTargetTemp] = useState(188);
+  const [startROR, setStartROR] = useState(20);
+  const [targetROR, setTargetROR] = useState(10);
   const [showPerMinute, setShowPerMinute] = useState(true);
   const [profile, setProfile] = useState([]);
   const [finalTempError, setFinalTempError] = useState(0);
@@ -140,6 +133,53 @@ export default function App() {
     <div className="app-root">
       {/* 樣式放最上層，避免跨檔案，直接 copy paste 用 */}
       <style>{`
+      input, button, select, textarea {
+        font-family:
+          'Noto Sans TC',
+          'PingFang TC',
+          'Microsoft JhengHei',
+          'Heiti TC',
+          'Segoe UI',
+          Arial,
+          Inter,
+          sans-serif !important;
+        font-weight: 400;
+        font-size: 1rem;
+        border-radius: 8px;
+        border: 1px solid #d8dde7;
+        background: #f9fafb;
+        color: #282828;
+        padding: 7px 10px;
+        box-sizing: border-box;
+        transition: border 0.2s;
+        outline: none;
+      }
+      input:focus, button:focus, select:focus, textarea:focus {
+        border: 1.5px solid #b95b16;
+      }
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+      
+      body, .app-root, input, button, label, table, th, td {
+        font-family:
+          'Noto Sans TC',
+          'PingFang TC',
+          'Microsoft JhengHei',
+          'Heiti TC',
+          'Segoe UI',
+          Arial,
+          Inter,
+          sans-serif !important;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+      }
+      
         body, .app-root {
           font-family: 'Inter', 'Noto Sans TC', Arial, "微軟正黑體", sans-serif;
           background: #f9fafb;
