@@ -221,7 +221,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="unit-row">
+        <div className="unit-row" style={{ gridColumn: '1 / -1' }}>
           <input
             type="checkbox"
             checked={showPerMinute}
