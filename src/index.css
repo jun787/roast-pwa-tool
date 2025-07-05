@@ -1,0 +1,252 @@
+/* 字型設定與重設 */
+:root {
+  font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC',
+    'Segoe UI', Arial, sans-serif;
+  --accent: #b95b16;
+  --main-bg: #fff;
+  --main-bg-dark: #18181a;
+  --header-txt: #282828;
+  --header-txt-dark: #f9fafb;
+  --input-bg: #f8f8f8;
+  --input-bg-dark: #222;
+  --input-txt: #212121;
+  --input-txt-dark: #f3f3f3;
+  --btn-bg: #ffb76b;
+  --btn-hover: #ff9800;
+  --btn-txt: #212121;
+  --card-bg: #fcfcfc;
+  --card-bg-dark: #232325;
+  --border: #e7e7e7;
+  --border-dark: #353545;
+}
+
+/* 暗色主題變數覆蓋 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --main-bg: #18181a;
+    --header-txt: #fff;
+    --input-bg: #222;
+    --input-txt: #fff;
+    --card-bg: #232325;
+    --border: #353545;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--main-bg);
+  color: var(--header-txt);
+  min-height: 100vh;
+  font-family: inherit;
+}
+
+/* 主卡片 */
+.app-root {
+  max-width: 700px;
+  margin: 32px auto;
+  background: var(--main-bg);
+  border-radius: 24px;
+  box-shadow: 0 6px 32px 0 #2222;
+  padding: 32px 30px 30px 30px;
+}
+
+/* 標題區塊 */
+.main-header,
+.title,
+h1,
+h2 {
+  text-align: left;
+  margin-bottom: 22px;
+  font-size: 2.3em;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--header-txt);
+  line-height: 1.13;
+  display: flex;
+  align-items: baseline;
+  gap: 0.1em;
+}
+.accent {
+  color: var(--accent);
+  letter-spacing: 0.09em;
+  font-size: 1.1em;
+}
+
+/* 表單2欄格線排版 */
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 36px;
+  margin-bottom: 4px;
+}
+@media (max-width: 700px) {
+  .app-root {
+    padding: 10px;
+  }
+  .form-grid-2col {
+    grid-template-columns: 1fr;
+    gap: 14px 0;
+  }
+}
+
+/* 表單行排版 */
+.form-row,
+.row-flex {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+label {
+  font-weight: 700;
+  color: var(--header-txt);
+  font-size: 1.09em;
+  margin-bottom: 2px;
+  letter-spacing: 0.01em;
+}
+input[type='number'],
+input[type='text'] {
+  background: var(--input-bg);
+  color: var(--input-txt);
+  border: 1.5px solid var(--border);
+  font-size: 1.13em;
+  border-radius: 8px;
+  padding: 8px 12px;
+  transition: border 0.15s, background 0.15s, color 0.15s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+input[type='number']:focus,
+input[type='text']:focus {
+  border: 1.5px solid var(--accent);
+  background: #1a1a1a;
+  color: #fff;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  margin-bottom: 0px;
+  font-family: inherit;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.unit-row,
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 22px 0;
+  color: var(--header-txt);
+  font-weight: 600;
+  font-size: 1em;
+  opacity: 0.97;
+}
+
+/* 橘色大按鈕 */
+.gen-btn,
+.row-flex button.gen-btn,
+button {
+  width: 100%;
+  background: var(--btn-bg);
+  color: var(--btn-txt) !important;
+  border-radius: 12px;
+  font-size: 1.18em;
+  font-weight: 700;
+  border: none;
+  padding: 13px 0;
+  margin: 22px 0 12px 0;
+  transition: background 0.17s, color 0.17s;
+  box-shadow: 0 1px 8px #b95b1630;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.gen-btn:hover,
+button:hover {
+  background: var(--btn-hover);
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  margin: 24px 0 0 0;
+  padding: 18px 20px;
+  box-shadow: 0 0 10px 0 #2222;
+  border: 1.5px solid var(--border);
+}
+
+/* 表格區塊 */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 18px;
+  font-size: 1.03em;
+}
+.data-table th,
+.data-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--main-bg);
+  color: var(--header-txt);
+}
+.data-table th {
+  background: #ffefd3;
+  color: #a44e00;
+  font-weight: 700;
+}
+
+.row-flex {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .row-flex {
+    flex-direction: column;
+    gap: 10px 0;
+  }
+}
+
+.chart-container {
+  width: 100%;
+  min-height: 240px;
+}
+.meta-info {
+  font-size: 0.97em;
+  color: #666;
+  margin-top: 6px;
+}
+
+/* 響應式設計加強（小螢幕適配） */
+@media (max-width: 540px) {
+  .app-root {
+    max-width: 99vw;
+    padding: 13px 2vw;
+  }
+  .main-header,
+  .title,
+  h1,
+  h2 {
+    font-size: 1.3rem;
+  }
+  .form-row,
+  .row-flex {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .gen-btn,
+  button {
+    font-size: 1rem;
+    padding: 11px 0;
+  }
+}

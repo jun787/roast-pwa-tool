@@ -1,0 +1,20 @@
+{
+  "name": "Roast ROR 預測工具",
+  "short_name": "ROR工具",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#fff9f3",
+  "background_color": "#fff9f3"
+}
