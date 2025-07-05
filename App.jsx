@@ -78,12 +78,12 @@ function calculateSmoothProfile({
 
 export default function App() {
   // 狀態欄
-  const [startTime, setStartTime] = useState();
-  const [startTemp, setStartTemp] = useState();
-  const [targetTime, setTargetTime] = useState();
-  const [targetTemp, setTargetTemp] = useState();
-  const [startROR, setStartROR] = useState();
-  const [targetROR, setTargetROR] = useState();
+  const [startTime, setStartTime] = useState(60);
+  const [startTemp, setStartTemp] = useState(100);
+  const [targetTime, setTargetTime] = useState(450);
+  const [targetTemp, setTargetTemp] = useState(188);
+  const [startROR, setStartROR] = useState(20);
+  const [targetROR, setTargetROR] = useState(10);
   const [showPerMinute, setShowPerMinute] = useState(true);
   const [profile, setProfile] = useState([]);
   const [finalTempError, setFinalTempError] = useState(0);
