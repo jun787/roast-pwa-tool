@@ -46,8 +46,10 @@ function calculateSmoothProfile({
   let tempErr = temps[temps.length - 1] - targetTemp;
   let adjustStep = 0;
   while (Math.abs(tempErr) > tempTolerance && adjustStep < maxIterations) {
-    let offset = -tempErr / (steps + 1) / 0.5;
-    rors = rors.map((v) => v + offset);
+    let offset = -tempErr / ((steps - 1) || 1) / 0.5;
+    for (let i = 1; i < steps; i++) {
+      rors[i] += offset;
+    }
     temps = [startTemp];
     for (let i = 1; i <= steps; i++) {
       let temp = temps[i - 1] + rors[i - 1] * 0.5;
