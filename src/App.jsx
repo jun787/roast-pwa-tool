@@ -298,10 +298,10 @@ export default function App() {
         {/* 圖表（X 軸為數值秒） */}
         <div className="card">
           <div className="cardTitle">預測溫度曲線視覺對照</div>
-          <ResponsiveContainer width="100%" aspect={2.2}>
+          <ResponsiveContainer width="110%" height={330}>
             <LineChart
               data={chartData}
-              margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
+              margin={{ top: 10, right: 15, left: -33, bottom: 0 }}
             >
               <XAxis
                 type="number"
