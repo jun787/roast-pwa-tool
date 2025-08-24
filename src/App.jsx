@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -7,20 +7,23 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from "recharts";
-import "./App.css";
+} from 'recharts';
+import './App.css';
+
+/* ===== 可調參數：紅點大小 ===== */
+const ACTUAL_DOT_RADIUS = 3;
 
 /* ===== Helpers ===== */
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const secToMMSS = (s) => {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
-  return `${m}:${ss.toString().padStart(2, "0")}`;
+  return `${m}:${ss.toString().padStart(2, '0')}`;
 };
 const secToZH = (s) => {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
-  return `${m}分${ss.toString().padStart(2, "0")}秒`;
+  return `${m}分${ss.toString().padStart(2, '0')}秒`;
 };
 
 /* ===== Generate curve (TP → FC, 1s step) ===== */
@@ -38,7 +41,7 @@ function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
       // TP 前段僅銜接，圖上不顯示
       const frac = t / Math.max(1, tpTime);
       ror = rorStart * 0.6 * frac;
-      bt = tpTemp - (rorStart * 0.2) * ((tpTime - t) / 60);
+      bt = tpTemp - rorStart * 0.2 * ((tpTime - t) / 60);
     } else {
       const f = (t - tpTime) / Math.max(1, fcTime - tpTime);
       ror = rorStart + (rorFC - rorStart) * Math.max(0, Math.min(1, f));
@@ -46,7 +49,7 @@ function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
     }
 
     pts.push({
-      t,                         // ← 用「秒」當數值型 X
+      t, // 數值型 X 軸（秒）
       bt: Number(bt.toFixed(2)), // 預測豆溫
       ror: Number((ror || 0).toFixed(2)), // 預測 ROR（°C/分）
     });
@@ -65,7 +68,9 @@ function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
 }
 
 export default function App() {
-  useEffect(() => { document.title = "烘豆參數預測工具"; }, []);
+  useEffect(() => {
+    document.title = '烘豆參數預測工具';
+  }, []);
 
   /* ===== 草稿參數（綁 input） ===== */
   const [tpTime, setTpTime] = useState(60);
@@ -77,17 +82,24 @@ export default function App() {
 
   /* ===== 已套用參數（圖表/表格使用） ===== */
   const [applied, setApplied] = useState({
-    tpTime: 60, tpTemp: 100, fcTime: 450, fcTemp: 188, rorStart: 20, rorFC: 10,
+    tpTime: 60,
+    tpTemp: 100,
+    fcTime: 450,
+    fcTemp: 188,
+    rorStart: 20,
+    rorFC: 10,
   });
 
-  /* 設定：節點與單位（即時生效） */
+  /* 設定：節點（圖表） */
   const [intervalSec, setIntervalSec] = useState(30);
-  const [unitPerMin, setUnitPerMin] = useState(true);
+
+  /* 下方「表格的 ROR 單位」切換（min / 30s） */
+  const [tableRorUnit, setTableRorUnit] = useState('min'); // 'min' | '30s'
 
   /* 實際紅點（只畫在圖上） */
   const [actuals, setActuals] = useState([]); // { t, temp }
-  const [actualTimeSec, setActualTimeSec] = useState("");
-  const [actualTemp, setActualTemp] = useState("");
+  const [actualTimeSec, setActualTimeSec] = useState('');
+  const [actualTemp, setActualTemp] = useState('');
 
   /* 產生/更新曲線（只有按按鈕才更新） */
   const data = useMemo(() => generateCurve6(applied), [applied]);
@@ -100,27 +112,31 @@ export default function App() {
 
   // checkpoints (TP→FC)
   const checkpoints = useMemo(
-    () => chartData.filter((d) => d.t % intervalSec === 0 && d.t <= applied.fcTime),
+    () =>
+      chartData.filter((d) => d.t % intervalSec === 0 && d.t <= applied.fcTime),
     [chartData, applied.fcTime, intervalSec]
   );
 
   // X 軸刻度（數值秒）；用 formatter 顯示 mm:ss
   const xTicks = useMemo(() => {
     const arr = [];
-    for (let s = applied.tpTime; s <= applied.fcTime; s += intervalSec) arr.push(s);
+    for (let s = applied.tpTime; s <= applied.fcTime; s += intervalSec)
+      arr.push(s);
     return arr;
   }, [applied.tpTime, applied.fcTime, intervalSec]);
 
-  // 表格資料（僅目標）
+  // 表格資料（僅目標；ROR 依 tableRorUnit 切換）
   const tableRows = useMemo(
     () =>
       checkpoints.map((d) => ({
         t: d.t,
         timeLabelZh: secToZH(d.t),
         targetBT: d.bt,
-        targetROR: Number((unitPerMin ? d.ror : d.ror / 2).toFixed(1)),
+        targetROR: Number(
+          (tableRorUnit === 'min' ? d.ror : d.ror / 2).toFixed(1)
+        ),
       })),
-    [checkpoints, unitPerMin]
+    [checkpoints, tableRorUnit]
   );
 
   // 紅點（用數值秒對齊）
@@ -143,9 +159,22 @@ export default function App() {
       const others = prev.filter((x) => x.t !== aligned);
       return [...others, { t: aligned, temp: T }];
     });
-    setActualTimeSec("");
-    setActualTemp("");
+    setActualTimeSec('');
+    setActualTemp('');
   };
+
+  // ★ 撤銷上一個紅點
+  const undoActual = () => {
+    setActuals((prev) => {
+      if (prev.length === 0) return prev;
+      const arr = [...prev].sort((a, b) => a.t - b.t);
+      arr.pop();
+      return arr;
+    });
+  };
+
+  // ★ 清除全部紅點
+  const clearActuals = () => setActuals([]);
 
   // 套用參數按鈕
   const applyParams = () => {
@@ -168,34 +197,68 @@ export default function App() {
     <div className="page">
       <div className="wrap">
         {/* Title */}
-        <div className="titleBar"><h1>烘豆參數預測工具</h1></div>
+        <div className="titleBar">
+          <h1>烘豆參數預測工具</h1>
+        </div>
 
         {/* 參數輸入 */}
         <div className="grid">
           <Field label="回溫點時間（秒）" value={tpTime} onChange={setTpTime} />
           <Field label="回溫點溫度（°C）" value={tpTemp} onChange={setTpTemp} />
-          <Field label="一爆目標時間（秒）" value={fcTime} onChange={setFcTime} />
-          <Field label="一爆目標溫度（°C）" value={fcTemp} onChange={setFcTemp} />
-          <Field label="初始 ROR（°C/分）" value={rorStart} onChange={setRorStart} />
+          <Field
+            label="一爆目標時間（秒）"
+            value={fcTime}
+            onChange={setFcTime}
+          />
+          <Field
+            label="一爆目標溫度（°C）"
+            value={fcTemp}
+            onChange={setFcTemp}
+          />
+          <Field
+            label="初始 ROR（°C/分）"
+            value={rorStart}
+            onChange={setRorStart}
+          />
           <div>
-            <Field label="一爆目標 ROR（°C/分）" value={rorFC} onChange={setRorFC} />
-            <button className="btnPrimary" style={{ marginTop: 8 }} onClick={applyParams}>
+            <Field
+              label="一爆目標 ROR（°C/分）"
+              value={rorFC}
+              onChange={setRorFC}
+            />
+            <button
+              className="btnPrimary"
+              style={{ marginTop: 8 }}
+              onClick={applyParams}
+            >
               產生預測曲線表格
             </button>
           </div>
         </div>
 
-        {/* 設定 */}
+        {/* 控制列 */}
         <div className="controls">
           <label className="labelRow">
-            <input type="checkbox" checked={unitPerMin} onChange={() => setUnitPerMin(v=>!v)} />
-            單位：{unitPerMin ? "°C/分" : "°C/30秒"}
-          </label>
-          <label className="labelRow">
             節點：
-            <select className="select" value={intervalSec} onChange={(e)=>setIntervalSec(Number(e.target.value))}>
+            <select
+              className="select"
+              value={intervalSec}
+              onChange={(e) => setIntervalSec(Number(e.target.value))}
+            >
               <option value={30}>每 30 秒</option>
               <option value={60}>每 60 秒</option>
+            </select>
+          </label>
+
+          <label className="labelRow">
+            表格 ROR 單位：
+            <select
+              className="select"
+              value={tableRorUnit}
+              onChange={(e) => setTableRorUnit(e.target.value)}
+            >
+              <option value="min">每分鐘（°C/分）</option>
+              <option value="30s">每 30 秒（°C/30秒）</option>
             </select>
           </label>
         </div>
@@ -203,17 +266,43 @@ export default function App() {
         {/* 實際點輸入 */}
         <div className="card">
           <div className="gridThree">
-            <SmallField label="實際時間（秒）" value={actualTimeSec} onChange={setActualTimeSec} placeholder="例如 180" />
-            <SmallField label="實際溫度（°C）" value={actualTemp} onChange={setActualTemp} placeholder="例如 145.3" />
-            <button className="btnPrimary" onClick={addActual}>加入實際點（紅色）</button>
+            <SmallField
+              label="實際時間（秒）"
+              value={actualTimeSec}
+              onChange={setActualTimeSec}
+              placeholder="例如 180"
+            />
+            <SmallField
+              label="實際溫度（°C）"
+              value={actualTemp}
+              onChange={setActualTemp}
+              placeholder="例如 145.3"
+            />
+            <div
+              className="flexRow"
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+            >
+              <button className="btnPrimary" onClick={addActual}>
+                加入實際點（紅色）
+              </button>
+              <button className="btnGhost" onClick={undoActual}>
+                撤銷上一個
+              </button>
+              <button className="btnGhost" onClick={clearActuals}>
+                清除全部紅點
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* 圖表（X 軸改為數值秒） */}
+        {/* 圖表（X 軸為數值秒） */}
         <div className="card">
           <div className="cardTitle">預測溫度曲線視覺對照</div>
           <ResponsiveContainer width="100%" aspect={2.2}>
-            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
+            >
               <XAxis
                 type="number"
                 dataKey="t"
@@ -221,47 +310,71 @@ export default function App() {
                 ticks={xTicks}
                 tickFormatter={secToMMSS}
                 minTickGap={10}
-                tick={{ fontSize: 12, fill: "var(--muted)" }}
-                axisLine={{ stroke: "var(--muted)" }}
-                tickLine={{ stroke: "var(--muted)" }}
+                tick={{ fontSize: 12, fill: 'var(--muted)' }}
+                axisLine={{ stroke: 'var(--muted)' }}
+                tickLine={{ stroke: 'var(--muted)' }}
               />
               <YAxis
                 yAxisId="left"
                 domain={[leftMin, leftMax]}
-                tick={{ fontSize: 12, fill: "var(--muted)" }}
-                axisLine={{ stroke: "var(--muted)" }}
-                tickLine={{ stroke: "var(--muted)" }}
+                tick={{ fontSize: 12, fill: 'var(--muted)' }}
+                axisLine={{ stroke: 'var(--muted)' }}
+                tickLine={{ stroke: 'var(--muted)' }}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
                 domain={[0, Math.max(24, applied.rorStart + 4)]}
-                tick={{ fontSize: 12, fill: "var(--muted)" }}
-                axisLine={{ stroke: "var(--muted)" }}
-                tickLine={{ stroke: "var(--muted)" }}
+                tick={{ fontSize: 12, fill: 'var(--muted)' }}
+                axisLine={{ stroke: 'var(--muted)' }}
+                tickLine={{ stroke: 'var(--muted)' }}
               />
               <Tooltip
-                labelFormatter={(value)=>secToMMSS(value)}
-                contentStyle={{ background: "var(--tooltipBg)", border: "1px solid var(--tooltipBorder)", color: "var(--fg)" }}
+                labelFormatter={(value) => secToMMSS(value)}
+                contentStyle={{
+                  background: 'var(--tooltipBg)',
+                  border: '1px solid var(--tooltipBorder)',
+                  color: 'var(--fg)',
+                }}
                 formatter={(v, name) => [v, name]}
               />
-              <Legend wrapperStyle={{ color: "var(--muted)" }} />
+              <Legend wrapperStyle={{ color: 'var(--muted)' }} />
 
               {/* 橘=BT、藍=ROR */}
-              <Line yAxisId="left"  type="monotone" dataKey="bt"  name="預測溫度" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
-              <Line yAxisId="right" type="monotone" dataKey="ror" name="預測ROR" stroke="#60a5fa" strokeWidth={2} dot={false} connectNulls />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="bt"
+                name="預測溫度"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="ror"
+                name="預測ROR"
+                stroke="#60a5fa"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
 
-              {/* 🔴 紅點：獨立資料、只畫 dot、不連線；x 用數值秒 t */}
+              {/* 🔴 紅點：獨立資料、只畫 dot、不連線 */}
               {actualDots.length > 0 && (
                 <Line
                   yAxisId="left"
                   data={actualDots}
                   dataKey="actual"
                   name="實際溫度"
-                  xAxisId={0}
-                  xKey="t"
                   stroke="transparent"
-                  dot={{ r: 5, stroke: "#ef4444", fill: "#ef4444" }}
+                  dot={{
+                    r: ACTUAL_DOT_RADIUS,
+                    stroke: '#ef4444',
+                    fill: '#ef4444',
+                  }}
                   isAnimationActive={false}
                 />
               )}
@@ -271,19 +384,24 @@ export default function App() {
 
         {/* 目標表 */}
         <div className="tableCard">
-          <div className="tableHeader">{intervalSec === 30 ? "每 30 秒" : "每 60 秒"} 目標表</div>
+          <div className="tableHeader">
+            {intervalSec === 30 ? '每 30 秒' : '每 60 秒'} 目標表
+          </div>
           <div className="tableWrap">
             <table className="tbl">
               <thead>
                 <tr>
                   <th className="th">時間</th>
                   <th className="th">目標溫度（°C）</th>
-                  <th className="th">目標升溫速率（{unitPerMin ? "°C/分" : "°C/30秒"}）</th>
+                  <th className="th">
+                    目標升溫速率（{tableRorUnit === 'min' ? '°C/分' : '°C/30秒'}
+                    ）
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((r, idx) => (
-                  <tr key={r.t} className={idx % 2 ? "tr zebra" : "tr"}>
+                  <tr key={r.t} className={idx % 2 ? 'tr zebra' : 'tr'}>
                     <td className="td td-time">{r.timeLabelZh}</td>
                     <td className="td td-temp">{r.targetBT.toFixed(1)}</td>
                     <td className="td td-ror">{r.targetROR.toFixed(1)}</td>
@@ -293,7 +411,6 @@ export default function App() {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -304,7 +421,12 @@ function Field({ label, value, onChange }) {
   return (
     <label className="field">
       <div className="label">{label}</div>
-      <input type="number" className="input" value={value} onChange={(e)=>onChange(Number(e.target.value))} />
+      <input
+        type="number"
+        className="input"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
     </label>
   );
 }
@@ -312,7 +434,13 @@ function SmallField({ label, value, onChange, placeholder }) {
   return (
     <label className="field">
       <div className="label">{label}</div>
-      <input type="number" className="input" placeholder={placeholder} value={value} onChange={(e)=>onChange(e.target.value)} />
+      <input
+        type="number"
+        className="input"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </label>
   );
 }
