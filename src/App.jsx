@@ -26,8 +26,31 @@ const secToZH = (s) => {
   return `${m}分${ss.toString().padStart(2, '0')}秒`;
 };
 
-/* ===== Generate curve (TP → FC, 1s step) ===== */
-function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
+/* ===== 在序列上查「首次達到某溫度」的時間（線性插值） ===== */
+function timeAtTemp(series, temp, endCapSec) {
+  for (let i = 1; i < series.length; i++) {
+    const a = series[i - 1],
+      b = series[i];
+    if ((a.bt <= temp && b.bt >= temp) || (a.bt >= temp && b.bt <= temp)) {
+      const ratio = (temp - a.bt) / (b.bt - a.bt || 1e-9);
+      const t = a.t + Math.max(0, Math.min(1, ratio)) * (b.t - a.t);
+      return Math.max(0, Math.min(endCapSec, t));
+    }
+  }
+  return null;
+}
+
+/* ===== 你的預測曲線（維持原樣）：TP → 末端（1s step） =====
+   注意：fcTime = 總烘焙時間；尾點 BT 對齊 dropTemp（下豆） */
+function generateCurve6({
+  tpTime,
+  tpTemp,
+  fcTime,
+  fcTemp,
+  rorStart,
+  rorFC,
+  dropTemp,
+}) {
   const dt = 1;
   const n = Math.max(1, Math.round(fcTime / dt));
   const pts = [];
@@ -36,9 +59,7 @@ function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
   for (let i = 0; i <= n; i++) {
     const t = i * dt;
     let ror;
-
     if (t < tpTime) {
-      // TP 前段僅銜接，圖上不顯示
       const frac = t / Math.max(1, tpTime);
       ror = rorStart * 0.6 * frac;
       bt = tpTemp - rorStart * 0.2 * ((tpTime - t) / 60);
@@ -47,21 +68,21 @@ function generateCurve6({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC }) {
       ror = rorStart + (rorFC - rorStart) * Math.max(0, Math.min(1, f));
       bt += (ror / 60) * dt;
     }
-
     pts.push({
-      t, // 數值型 X 軸（秒）
-      bt: Number(bt.toFixed(2)), // 預測豆溫
-      ror: Number((ror || 0).toFixed(2)), // 預測 ROR（°C/分）
+      t,
+      bt: Number(bt.toFixed(2)),
+      ror: Number((ror || 0).toFixed(2)),
     });
   }
 
-  // 校正：使 BT(fcTime)=fcTemp
-  const last = pts[pts.length - 1];
-  const delta = fcTemp - last.bt;
-  if (Math.abs(delta) > 0.3) {
-    for (let i = 0; i < pts.length; i++) {
-      const w = i / (pts.length - 1);
-      pts[i].bt = Number((pts[i].bt + delta * w).toFixed(2));
+  if (pts.length && Number.isFinite(dropTemp)) {
+    const last = pts[pts.length - 1];
+    const delta = dropTemp - last.bt;
+    if (Math.abs(delta) > 0.3) {
+      for (let i = 0; i < pts.length; i++) {
+        const w = i / Math.max(1, pts.length - 1);
+        pts[i].bt = Number((pts[i].bt + delta * w).toFixed(2));
+      }
     }
   }
   return pts;
@@ -75,26 +96,34 @@ export default function App() {
   /* ===== 草稿參數（綁 input） ===== */
   const [tpTime, setTpTime] = useState(60);
   const [tpTemp, setTpTemp] = useState(100);
-  const [fcTime, setFcTime] = useState(450);
-  const [fcTemp, setFcTemp] = useState(188);
-  const [rorStart, setRorStart] = useState(20);
-  const [rorFC, setRorFC] = useState(10);
+  const [fcTime, setFcTime] = useState(450); // 總烘焙時間（秒）
+  const [fcTemp, setFcTemp] = useState(188); // 一爆溫度（°C）
+  const [dropTemp, setDropTemp] = useState(204); // 下豆溫度（°C）
+  const [rorStart, setRorStart] = useState(20); // 起始 ROR
+  const [rorFC, setRorFC] = useState(10); // 末端 ROR
+  const [yellowTemp, setYellowTemp] = useState(145);
 
-  /* ===== 已套用參數（圖表/表格使用） ===== */
+  /* ===== 已套用參數（圖表/表格使用）——缺它會整頁炸掉！===== */
   const [applied, setApplied] = useState({
     tpTime: 60,
     tpTemp: 100,
-    fcTime: 450,
-    fcTemp: 188,
+    fcTime: 450, // 總烘焙時間
+    fcTemp: 188, // 一爆溫度
+    dropTemp: 204, // 下豆溫度
     rorStart: 20,
     rorFC: 10,
+    yellowTemp: 145,
   });
+
+  /* 工具：數值夾限 + 一次性提示（按按鈕時才檢查） */
+  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const [applyNote, setApplyNote] = useState('');
 
   /* 設定：節點（圖表） */
   const [intervalSec, setIntervalSec] = useState(30);
 
-  /* 下方「表格的 ROR 單位」切換（min / 30s） */
-  const [tableRorUnit, setTableRorUnit] = useState('min'); // 'min' | '30s'
+  /* 表格 ROR 單位（min / 30s） */
+  const [tableRorUnit, setTableRorUnit] = useState('min');
 
   /* 實際紅點（只畫在圖上） */
   const [actuals, setActuals] = useState([]); // { t, temp }
@@ -110,14 +139,14 @@ export default function App() {
     [data, applied.tpTime]
   );
 
-  // checkpoints (TP→FC)
+  // checkpoints (TP → 總時間)
   const checkpoints = useMemo(
     () =>
       chartData.filter((d) => d.t % intervalSec === 0 && d.t <= applied.fcTime),
     [chartData, applied.fcTime, intervalSec]
   );
 
-  // X 軸刻度（數值秒）；用 formatter 顯示 mm:ss
+  // X 軸刻度
   const xTicks = useMemo(() => {
     const arr = [];
     for (let s = applied.tpTime; s <= applied.fcTime; s += intervalSec)
@@ -125,7 +154,7 @@ export default function App() {
     return arr;
   }, [applied.tpTime, applied.fcTime, intervalSec]);
 
-  // 表格資料（僅目標；ROR 依 tableRorUnit 切換）
+  // 表格資料
   const tableRows = useMemo(
     () =>
       checkpoints.map((d) => ({
@@ -139,7 +168,7 @@ export default function App() {
     [checkpoints, tableRorUnit]
   );
 
-  // 紅點（用數值秒對齊）
+  // 紅點
   const actualDots = useMemo(
     () =>
       [...actuals]
@@ -148,7 +177,7 @@ export default function App() {
     [actuals]
   );
 
-  // 新增紅點（對齊 interval；用已套用參數的 tp/fc 範圍）
+  // 新增紅點
   const addActual = () => {
     const s = Number(actualTimeSec);
     const T = Number(actualTemp);
@@ -163,7 +192,6 @@ export default function App() {
     setActualTemp('');
   };
 
-  // ★ 撤銷上一個紅點
   const undoActual = () => {
     setActuals((prev) => {
       if (prev.length === 0) return prev;
@@ -172,16 +200,42 @@ export default function App() {
       return arr;
     });
   };
-
-  // ★ 清除全部紅點
   const clearActuals = () => setActuals([]);
 
-  // 套用參數按鈕
+  // 套用參數按鈕（按下才檢查 & 夾限）
   const applyParams = () => {
-    setApplied({ tpTime, tpTemp, fcTime, fcTemp, rorStart, rorFC });
+    const y0 = Math.round(yellowTemp);
+    const fc0 = Math.round(fcTemp);
+    const dr0 = Math.round(dropTemp);
+
+    let y = clampNum(y0, 120, 170); // 轉黃 120–170（可調）
+    let fc = clampNum(fc0, 120, 230); // 一爆 120–230
+    let dr = clampNum(dr0, 150, 240); // 下豆 150–240
+
+    const notes = [];
+    if (fc <= y) {
+      fc = Math.min(230, y + 1);
+      notes.push(`一爆溫度自動調為 ${fc}°C（需高於轉黃 ${y}°C）`);
+    }
+    if (dr < fc) {
+      dr = Math.min(240, fc);
+      notes.push(`下豆溫度自動調為 ${dr}°C（需不低於一爆 ${fc}°C）`);
+    }
+
+    setApplied({
+      tpTime,
+      tpTemp,
+      fcTime, // 總烘焙時間原樣使用
+      fcTemp: fc,
+      dropTemp: dr,
+      rorStart,
+      rorFC,
+      yellowTemp: y,
+    });
+    setApplyNote(notes.join('；'));
   };
 
-  // 安全的左側 Y 軸範圍
+  // 左側 Y 軸範圍
   const leftMin = useMemo(() => {
     if (!chartData.length) return 80;
     const v = Math.min(...chartData.map((d) => d.bt));
@@ -192,6 +246,29 @@ export default function App() {
     const v = Math.max(...chartData.map((d) => d.bt));
     return Math.ceil(v + 10);
   }, [chartData]);
+
+  // 三階段比例（以總烘焙時間為分母）——轉黃溫度即時反映
+  const phaseInfo = useMemo(() => {
+    const endT = applied.fcTime;
+    const tYellow = timeAtTemp(data, yellowTemp, endT) ?? 0;
+    const tFC = timeAtTemp(data, applied.fcTemp, endT) ?? endT;
+
+    const dry = Math.max(0, Math.min(endT, tYellow) - 0); // 0 → 轉黃
+    const mai = Math.max(0, Math.min(endT, tFC) - Math.min(endT, tYellow)); // 轉黃 → 一爆
+    const dev = Math.max(0, endT - Math.min(endT, tFC)); // 一爆 → 下豆
+
+    const sum = Math.max(1, endT);
+    return {
+      tYellow,
+      tFC,
+      drySec: Math.round(dry),
+      maiSec: Math.round(mai),
+      devSec: Math.round(dev),
+      dryPct: (dry / sum) * 100,
+      maiPct: (mai / sum) * 100,
+      devPct: (dev / sum) * 100,
+    };
+  }, [data, applied.fcTime, applied.fcTemp, yellowTemp]);
 
   return (
     <div className="page">
@@ -205,15 +282,17 @@ export default function App() {
         <div className="grid">
           <Field label="回溫點時間（秒）" value={tpTime} onChange={setTpTime} />
           <Field label="回溫點溫度（°C）" value={tpTemp} onChange={setTpTemp} />
+          <Field label="總烘焙時間（秒）" value={fcTime} onChange={setFcTime} />
+          <Field label="一爆溫度（°C）" value={fcTemp} onChange={setFcTemp} />
           <Field
-            label="一爆目標時間（秒）"
-            value={fcTime}
-            onChange={setFcTime}
+            label="轉黃溫度（°C）"
+            value={yellowTemp}
+            onChange={setYellowTemp}
           />
           <Field
-            label="一爆目標溫度（°C）"
-            value={fcTemp}
-            onChange={setFcTemp}
+            label="下豆溫度（°C）"
+            value={dropTemp}
+            onChange={setDropTemp}
           />
           <Field
             label="初始 ROR（°C/分）"
@@ -222,7 +301,7 @@ export default function App() {
           />
           <div>
             <Field
-              label="一爆目標 ROR（°C/分）"
+              label="末端 ROR（°C/分）"
               value={rorFC}
               onChange={setRorFC}
             />
@@ -233,6 +312,13 @@ export default function App() {
             >
               產生預測曲線表格
             </button>
+            {applyNote && (
+              <div
+                style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)' }}
+              >
+                {applyNote}
+              </div>
+            )}
           </div>
         </div>
 
@@ -263,39 +349,83 @@ export default function App() {
           </label>
         </div>
 
-        {/* 實際點輸入 */}
+        {/* 三階段比例長條 */}
         <div className="card">
-          <div className="gridThree">
-            <SmallField
-              label="實際時間（秒）"
-              value={actualTimeSec}
-              onChange={setActualTimeSec}
-              placeholder="例如 180"
-            />
-            <SmallField
-              label="實際溫度（°C）"
-              value={actualTemp}
-              onChange={setActualTemp}
-              placeholder="例如 145.3"
+          <div className="cardTitle">三階段時間比例</div>
+          <div
+            style={{
+              display: 'flex',
+              height: 16,
+              borderRadius: 8,
+              overflow: 'hidden',
+              border: '1px solid var(--border, #e5e7eb)',
+            }}
+            title={`脫水 ${secToZH(phaseInfo.drySec)} | 梅納 ${secToZH(
+              phaseInfo.maiSec
+            )} | 發展 ${secToZH(phaseInfo.devSec)}`}
+          >
+            <div
+              style={{ width: `${phaseInfo.dryPct}%`, background: '#c8ebff' }}
             />
             <div
-              className="flexRow"
-              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-            >
-              <button className="btnPrimary" onClick={addActual}>
-                加入實際點（紅色）
-              </button>
-              <button className="btnGhost" onClick={undoActual}>
-                撤銷上一個
-              </button>
-              <button className="btnGhost" onClick={clearActuals}>
-                清除全部紅點
-              </button>
-            </div>
+              style={{ width: `${phaseInfo.maiPct}%`, background: '#fff2b3' }}
+            />
+            <div
+              style={{ width: `${phaseInfo.devPct}%`, background: '#f3f4f6' }}
+            />
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              marginTop: 6,
+              fontSize: 12,
+              color: 'var(--muted)',
+            }}
+          >
+            <span>
+              <i
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  background: '#c8ebff',
+                  border: '1px solid #cbd5e1',
+                  marginRight: 6,
+                }}
+              />
+              脫水 {secToZH(phaseInfo.drySec)} ({phaseInfo.dryPct.toFixed(1)}%)
+            </span>
+            <span>
+              <i
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  background: '#fff2b3',
+                  border: '1px solid #cbd5e1',
+                  marginRight: 6,
+                }}
+              />
+              梅納 {secToZH(phaseInfo.maiSec)} ({phaseInfo.maiPct.toFixed(1)}%)
+            </span>
+            <span>
+              <i
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  background: '#f3f4f6',
+                  border: '1px solid #cbd5e1',
+                  marginRight: 6,
+                }}
+              />
+              發展 {secToZH(phaseInfo.devSec)} ({phaseInfo.devPct.toFixed(1)}%)
+            </span>
           </div>
         </div>
 
-        {/* 圖表（X 軸為數值秒） */}
+        {/* 圖表 */}
         <div className="card">
           <div className="cardTitle">預測溫度曲線視覺對照</div>
           <ResponsiveContainer width="110%" height={330}>
@@ -339,8 +469,6 @@ export default function App() {
                 formatter={(v, name) => [v, name]}
               />
               <Legend wrapperStyle={{ color: 'var(--muted)' }} />
-
-              {/* 橘=BT、藍=ROR */}
               <Line
                 yAxisId="left"
                 type="monotone"
@@ -361,8 +489,6 @@ export default function App() {
                 dot={false}
                 connectNulls
               />
-
-              {/* 🔴 紅點：獨立資料、只畫 dot、不連線 */}
               {actualDots.length > 0 && (
                 <Line
                   yAxisId="left"

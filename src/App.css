@@ -240,3 +240,67 @@ body,
   padding-top: 10px;
   padding-bottom: 10px;
 }
+
+/* === Phase bar === */
+.phase-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+.phase-seg {
+  display: inline-block;
+  height: 100%;
+}
+.phase-legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.phase-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  border: 1px solid #cbd5e1;
+}
+.phase-blue {
+  background: #c8ebff;
+} /* 水藍：脫水期 */
+.phase-yellow {
+  background: #fff2b3;
+} /* 淺黃：梅納期 */
+.phase-gray {
+  background: #f3f4f6;
+} /* 白灰：發展期 */
+
+/* === SG controls === */
+.sg-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+.sg-row input[type='number'] {
+  width: 72px;
+}
+.sg-chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+.form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+}
+.form-row label {
+  min-width: 140px;
+  font-size: 14px;
+}
