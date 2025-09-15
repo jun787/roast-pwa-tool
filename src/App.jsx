@@ -522,7 +522,7 @@ export default function App() {
                 alignItems: 'center',
               }}
             >
-              <strong>本機紀錄</strong>
+              <strong style={{ color: '#000' }}>本機紀錄</strong>
               <button className="btnGhost" onClick={() => setDrawerOpen(false)}>
                 關閉
               </button>
