@@ -304,16 +304,17 @@ body,
   min-width: 140px;
   font-size: 14px;
 }
+
 /* 小尺寸按鈕與清單行樣式（僅抽屜清單用） */
 .btnSm {
   width: auto;
-  padding: 6px 10px;
-  font-size: 13px;
-  border-radius: 10px;
+  padding: 4px 12px;
+  font-size: 14px;
+  border-radius: 8px;
 }
 .btnIcon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -323,19 +324,44 @@ body,
   border-radius: 10px;
 }
 .listCard {
-  padding: 10px 12px;
+  padding: 1px 3px;
 } /* 壓縮卡片內距 */
 .listMeta {
   font-size: 12px;
+  line-height: 1.2;
   color: var(--muted);
 }
 .listActions {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 35px;
+  margin-top: 2px;
 }
 .drawerList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 0px;
 } /* 降低每列間距 */
+
+.drawerList .card {
+  margin: 0 0 6px 0;
+}
+
+.drawerList .listActions > button {
+  margin: 0 !important; /* ← 關鍵：覆蓋 index.css 的 button margin */
+  width: auto !important; /* 防止 .btnPrimary 預設 100% 寬 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 抽屜 header 裡的關閉鈕 */
+.drawerListHeader .btnGhost {
+  padding: 4px 8px;
+  font-size: 16px;
+  width: 65%;
+}
+
+/* 抽屜裡的「儲存本次」鈕 */
+.drawerListSave .btnPrimary {
+  width: 100%; /* 保持滿版 */
+  padding: 8px 0; /* 比現在矮 */
+  font-size: 14px;
+}

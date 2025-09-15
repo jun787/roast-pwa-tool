@@ -514,7 +514,7 @@ export default function App() {
               overflowY: 'auto',
             }}
           >
-            <div
+            <div className = "drawerListHeader"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -527,7 +527,7 @@ export default function App() {
               </button>
             </div>
 
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} className = "drawerListSave">
               <label className="field">
                 <div className="label">此次名稱（可選）</div>
                 <input
@@ -590,6 +590,15 @@ export default function App() {
                         載入
                       </button>
                       <button
+                        className="btnGhost btnSm" // ← 小號次要按鈕
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doDelete(s.id);
+                        }}
+                      >
+                        刪除
+                      </button>
+                      <button
                         className="btnIcon" // ← 小圖示鈕（32x32）
                         onClick={(e) => {
                           e.stopPropagation();
@@ -598,15 +607,6 @@ export default function App() {
                         title="重新命名"
                       >
                         ✎
-                      </button>
-                      <button
-                        className="btnGhost btnSm" // ← 小號次要按鈕
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          doDelete(s.id);
-                        }}
-                      >
-                        刪除
                       </button>
                     </div>
                   </div>
