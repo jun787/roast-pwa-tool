@@ -342,7 +342,10 @@ export default function App() {
             ≡ 紀錄
           </button>
 
-          <h1>烘豆參數預測工具</h1>
+          <h1 style={{ flex: '0 0 auto', textAlign: 'center', margin: 0 }}>
+            烘豆參數預測工具
+          </h1>
+          <div style={{ width: '50px' }} />
         </div>
 
         {drawerOpen && (
