@@ -442,6 +442,18 @@ export default function App() {
     }
   };
 
+  const doRename = async (s) => {
+    const newName = window.prompt('輸入新名稱', s.name || '');
+    if (!newName) return;
+    try {
+      await saveSession({ ...s, name: newName }); // 直接覆蓋
+      const rows = await listSessions();
+      setSessions(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error('rename failed', e);
+    }
+  };
+
   return (
     <div className="page">
       <div className="wrap">
@@ -546,43 +558,60 @@ export default function App() {
                 gap: 8,
               }}
             >
-              {(Array.isArray(sessions) ? sessions : []).map((s) => (
-                <div
-                  key={s.id || s.updatedAt || Math.random()}
-                  className="card"
-                  style={{ padding: 10 }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    {s.name || '未命名'}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {(s.updatedAt && new Date(s.updatedAt).toLocaleString()) ||
-                      '—'}
-                  </div>
+              <div className="drawerList" style={{ marginTop: 8 }}>
+                {(Array.isArray(sessions) ? sessions : []).map((s) => (
+                  <div
+                    key={s.id || s.updatedAt || Math.random()}
+                    className="card listCard" // ← 多加 listCard
+                    style={{ padding: 10, cursor: 'pointer' }} // 你原本有 padding 就保留
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => doLoad(s)}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      {s.name || '未命名'}
+                    </div>
+                    <div className="listMeta">
+                      {(s.updatedAt &&
+                        new Date(s.updatedAt).toLocaleString()) ||
+                        '—'}
+                    </div>
 
-                  <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-                    <button
-                      className="btnPrimary"
-                      style={{ flex: 1 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        doLoad(s);
-                      }} // ← 載入
-                    >
-                      載入
-                    </button>
-                    <button
-                      className="btnGhost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        doDelete(s.id);
-                      }} // ← 刪除
-                    >
-                      刪除
-                    </button>
+                    <div className="listActions">
+                      {' '}
+                      {/* ← 用 listActions 控制行距 */}
+                      <button
+                        className="btnPrimary btnSm" // ← 小號主按鈕
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doLoad(s);
+                        }}
+                      >
+                        載入
+                      </button>
+                      <button
+                        className="btnIcon" // ← 小圖示鈕（32x32）
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doRename(s);
+                        }}
+                        title="重新命名"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        className="btnGhost btnSm" // ← 小號次要按鈕
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doDelete(s.id);
+                        }}
+                      >
+                        刪除
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
 
               {(!sessions || sessions.length === 0) && (
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>

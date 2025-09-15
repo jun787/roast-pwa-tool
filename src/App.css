@@ -304,3 +304,38 @@ body,
   min-width: 140px;
   font-size: 14px;
 }
+/* 小尺寸按鈕與清單行樣式（僅抽屜清單用） */
+.btnSm {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.btnIcon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 10px;
+}
+.listCard {
+  padding: 10px 12px;
+} /* 壓縮卡片內距 */
+.listMeta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.listActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.drawerList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+} /* 降低每列間距 */
