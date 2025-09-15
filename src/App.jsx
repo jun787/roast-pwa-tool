@@ -1,3 +1,4 @@
+import { saveSession, listSessions, deleteSession } from './storage';
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
@@ -93,6 +94,21 @@ export default function App() {
     document.title = '烘豆參數預測工具';
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const rows = await listSessions();
+        if (alive) setSessions(Array.isArray(rows) ? rows : []);
+      } catch {
+        if (alive) setSessions([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   /* ===== 草稿參數（綁 input） ===== */
   const [tpTime, setTpTime] = useState(60);
   const [tpTemp, setTpTemp] = useState(100);
@@ -102,6 +118,9 @@ export default function App() {
   const [rorStart, setRorStart] = useState(20); // 起始 ROR
   const [rorFC, setRorFC] = useState(10); // 末端 ROR
   const [yellowTemp, setYellowTemp] = useState(145);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [sessionName, setSessionName] = useState('');
 
   /* ===== 已套用參數（圖表/表格使用）——缺它會整頁炸掉！===== */
   const [applied, setApplied] = useState({
@@ -270,13 +289,139 @@ export default function App() {
     };
   }, [data, applied.fcTime, applied.fcTemp, yellowTemp]);
 
+  // ↙↙ 放在 App() 裡、applyParams 之後、return 之前
+  const doSave = async () => {
+    try {
+      const pack = {
+        name: sessionName || `未命名-${new Date().toLocaleString()}`,
+        params: applied, // 已套用參數（與圖表一致）
+        actuals, // 紅點
+        intervalSec,
+        tableRorUnit,
+      };
+
+      // 若你已建立 storage.js 並正確 import，以下三行會真的儲存；
+      // 如果還沒建立 storage.js，也不會白屏（只是沒存到）
+      if (
+        typeof saveSession === 'function' &&
+        typeof listSessions === 'function'
+      ) {
+        await saveSession(pack);
+        const rows = await listSessions();
+        setSessions(Array.isArray(rows) ? rows : []);
+      }
+
+      setSessionName('');
+    } catch (e) {
+      console.error('doSave failed', e);
+    }
+  };
+
   return (
     <div className="page">
       <div className="wrap">
         {/* Title */}
-        <div className="titleBar">
+        <div
+          className="titleBar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <button
+            className="btnGhost"
+            style={{ fontSize: '12px', padding: '2px 2px' }}
+            onClick={() => setDrawerOpen((v) => !v)}
+          >
+            ≡ 紀錄
+          </button>
           <h1>烘豆參數預測工具</h1>
         </div>
+
+        {drawerOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: 280,
+              background: 'var(--cardBg,#fff)',
+              borderRight: '1px solid #e5e7eb',
+              boxShadow: '2px 0 8px rgba(0,0,0,.05)',
+              padding: 12,
+              zIndex: 50,
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <strong>本機紀錄</strong>
+              <button className="btnGhost" onClick={() => setDrawerOpen(false)}>
+                關閉
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label className="field">
+                <div className="label">此次名稱（可選）</div>
+                <input
+                  className="input"
+                  value={sessionName}
+                  onChange={(e) => setSessionName(e.target.value)}
+                  placeholder="例如 0920 哥倫比亞 300g"
+                />
+              </label>
+              {/* 這顆先呼叫一個保底的 doSave（下一段我給） */}
+              <button
+                className="btnPrimary"
+                onClick={doSave}
+                style={{ marginTop: 8, width: '100%' }}
+              >
+                儲存本次
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16, fontSize: 12, color: 'var(--muted)' }}>
+              清單
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              {(Array.isArray(sessions) ? sessions : []).map((s) => (
+                <div
+                  key={s.id || s.updatedAt || Math.random()}
+                  className="card"
+                  style={{ padding: 10 }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    {s.name || '未命名'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {(s.updatedAt && new Date(s.updatedAt).toLocaleString()) ||
+                      '—'}
+                  </div>
+                </div>
+              ))}
+              {(!sessions || sessions.length === 0) && (
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  尚無紀錄
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 參數輸入 */}
         <div className="grid">
