@@ -425,6 +425,38 @@ export default function App() {
           </div>
         </div>
 
+        {/* 實際點輸入 */}
+        <div className="card">
+          <div className="gridThree">
+            <SmallField
+              label="實際時間（秒）"
+              value={actualTimeSec}
+              onChange={setActualTimeSec}
+              placeholder="例如 180"
+            />
+            <SmallField
+              label="實際溫度（°C）"
+              value={actualTemp}
+              onChange={setActualTemp}
+              placeholder="例如 145.3"
+            />
+            <div
+              className="flexRow"
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+            >
+              <button className="btnPrimary" onClick={addActual}>
+                加入實際點（紅色）
+              </button>
+              <button className="btnGhost" onClick={undoActual}>
+                撤銷上一個
+              </button>
+              <button className="btnGhost" onClick={clearActuals}>
+                清除全部紅點
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* 圖表 */}
         <div className="card">
           <div className="cardTitle">預測溫度曲線視覺對照</div>
