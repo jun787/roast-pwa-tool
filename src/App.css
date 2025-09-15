@@ -312,17 +312,7 @@ body,
   font-size: 14px;
   border-radius: 8px;
 }
-.btnIcon {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  background: transparent;
-  border-radius: 10px;
-}
+
 .listCard {
   padding: 1px 3px;
 } /* 壓縮卡片內距 */
