@@ -1,4 +1,4 @@
-// src/storage.js
+// src/storage.js  —— 全檔替換
 const DB_NAME = 'roastpred-db';
 const STORE = 'sessions';
 
@@ -33,6 +33,15 @@ async function idbGetAll() {
     req.onerror = () => reject(req.error);
   });
 }
+async function idbGetOne(id) {
+  const db = await withDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
 async function idbDelete(id) {
   const db = await withDB();
   return new Promise((resolve, reject) => {
@@ -54,6 +63,9 @@ function lsAll() {
 }
 function lsWrite(all) {
   localStorage.setItem(LS_KEY, JSON.stringify(all));
+}
+function lsGet(id) {
+  return lsAll().find((x) => x.id === id) || null;
 }
 
 export async function saveSession(session) {
@@ -86,6 +98,13 @@ export async function listSessions() {
       (b.updatedAt || '').localeCompare(a.updatedAt || '')
     );
   }
+}
+export async function getSession(id) {
+  try {
+    const one = await idbGetOne(id);
+    if (one) return one;
+  } catch {}
+  return lsGet(id);
 }
 export async function deleteSession(id) {
   try {

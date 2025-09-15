@@ -1,5 +1,5 @@
 import { saveSession, listSessions, deleteSession } from './storage';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   LineChart,
   Line,
@@ -94,6 +94,107 @@ export default function App() {
     document.title = '烘豆參數預測工具';
   }, []);
 
+  // ✅ 放這裡（很前面）
+  const [sessions, setSessions] = useState([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sessionName, setSessionName] = useState('');
+  const drawerRef = useRef(null);
+
+  // ✅ 取代你原本的 2-4：iPhone 左緣滑出 / 抽屜內左滑關閉（安全版）
+  useEffect(() => {
+    // 只有觸控裝置才啟用（避免桌機環境觸發奇怪事件）
+    const isTouch =
+      typeof window !== 'undefined' &&
+      ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+    if (!isTouch) return;
+
+    let startX = null;
+    let startY = null;
+    let tracking = false;
+    let inDrawer = false;
+
+    function onStart(e) {
+      // 防呆：事件型態檢查
+      const touches = e?.touches;
+      if (!touches || touches.length !== 1) return;
+
+      const t = touches[0];
+      if (!t) return;
+
+      startX = t.clientX ?? 0;
+      startY = t.clientY ?? 0;
+
+      // 左邊緣開始 => 嘗試開啟
+      if (!drawerOpen && startX <= 16) {
+        tracking = true;
+        inDrawer = false;
+        return;
+      }
+
+      // 抽屜內開始 => 允許左滑關閉（右滑不關）
+      if (drawerOpen && drawerRef?.current) {
+        const r = drawerRef.current.getBoundingClientRect?.();
+        if (r) {
+          inDrawer =
+            startX >= r.left &&
+            startX <= r.right &&
+            startY >= r.top &&
+            startY <= r.bottom;
+          if (inDrawer) {
+            tracking = true;
+          }
+        }
+      }
+    }
+
+    function onMove(e) {
+      if (!tracking || startX == null) return;
+      const touches = e?.touches;
+      if (!touches || touches.length !== 1) return;
+
+      const t = touches[0];
+      if (!t) return;
+
+      const dx = (t.clientX ?? 0) - startX;
+
+      // 開啟：左緣右滑
+      if (!drawerOpen && dx > 24) {
+        setDrawerOpen(true);
+        tracking = false;
+        inDrawer = false;
+        return;
+      }
+
+      // 關閉：抽屜內左滑（右滑不關）
+      if (drawerOpen && inDrawer && dx < -24) {
+        setDrawerOpen(false);
+        tracking = false;
+        inDrawer = false;
+        return;
+      }
+    }
+
+    function onEnd() {
+      startX = null;
+      startY = null;
+      tracking = false;
+      inDrawer = false;
+    }
+
+    // 綁在 window（或 document）皆可，這裡用 window
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+
+    // 清理
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, [drawerOpen, drawerRef]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -118,9 +219,6 @@ export default function App() {
   const [rorStart, setRorStart] = useState(20); // 起始 ROR
   const [rorFC, setRorFC] = useState(10); // 末端 ROR
   const [yellowTemp, setYellowTemp] = useState(145);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sessions, setSessions] = useState([]);
-  const [sessionName, setSessionName] = useState('');
 
   /* ===== 已套用參數（圖表/表格使用）——缺它會整頁炸掉！===== */
   const [applied, setApplied] = useState({
@@ -289,31 +387,58 @@ export default function App() {
     };
   }, [data, applied.fcTime, applied.fcTemp, yellowTemp]);
 
-  // ↙↙ 放在 App() 裡、applyParams 之後、return 之前
   const doSave = async () => {
     try {
       const pack = {
         name: sessionName || `未命名-${new Date().toLocaleString()}`,
-        params: applied, // 已套用參數（與圖表一致）
+        params: applied, // 已套用參數
         actuals, // 紅點
         intervalSec,
         tableRorUnit,
       };
-
-      // 若你已建立 storage.js 並正確 import，以下三行會真的儲存；
-      // 如果還沒建立 storage.js，也不會白屏（只是沒存到）
-      if (
-        typeof saveSession === 'function' &&
-        typeof listSessions === 'function'
-      ) {
-        await saveSession(pack);
-        const rows = await listSessions();
-        setSessions(Array.isArray(rows) ? rows : []);
-      }
-
+      await saveSession(pack);
+      const rows = await listSessions();
+      setSessions(Array.isArray(rows) ? rows : []);
       setSessionName('');
     } catch (e) {
       console.error('doSave failed', e);
+    }
+  };
+
+  const doLoad = (s) => {
+    if (!s) return;
+
+    // 1) 取出儲存的參數（若欄位缺就保留現值）
+    const p = s.params || applied;
+
+    // 2) 更新「套用後」狀態（圖表/表格用）
+    setApplied(p);
+
+    // 3) 同步更新「輸入框」綁定的各個 state，這樣 UI 會顯示載入的值
+    setTpTime(p.tpTime ?? tpTime);
+    setTpTemp(p.tpTemp ?? tpTemp);
+    setFcTime(p.fcTime ?? fcTime);
+    setFcTemp(p.fcTemp ?? fcTemp);
+    setDropTemp(p.dropTemp ?? dropTemp);
+    setRorStart(p.rorStart ?? rorStart);
+    setRorFC(p.rorFC ?? rorFC);
+    setYellowTemp(p.yellowTemp ?? yellowTemp);
+
+    // 4) 其他一起回填
+    setActuals(Array.isArray(s.actuals) ? s.actuals : []);
+    setIntervalSec(s.intervalSec ?? 30);
+    setTableRorUnit(s.tableRorUnit ?? 'min');
+
+    setDrawerOpen(false);
+  };
+
+  const doDelete = async (id) => {
+    try {
+      await deleteSession(id);
+      const rows = await listSessions();
+      setSessions(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error('delete failed', e);
     }
   };
 
@@ -329,6 +454,18 @@ export default function App() {
             justifyContent: 'space-between',
           }}
         >
+          {drawerOpen && (
+            <div
+              onClick={() => setDrawerOpen(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.35)',
+                zIndex: 40,
+              }}
+            />
+          )}
+
           <button
             className="btnGhost"
             style={{
@@ -350,6 +487,7 @@ export default function App() {
 
         {drawerOpen && (
           <div
+            ref={drawerRef}
             style={{
               position: 'fixed',
               top: 0,
@@ -421,8 +559,31 @@ export default function App() {
                     {(s.updatedAt && new Date(s.updatedAt).toLocaleString()) ||
                       '—'}
                   </div>
+
+                  <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                    <button
+                      className="btnPrimary"
+                      style={{ flex: 1 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        doLoad(s);
+                      }} // ← 載入
+                    >
+                      載入
+                    </button>
+                    <button
+                      className="btnGhost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        doDelete(s.id);
+                      }} // ← 刪除
+                    >
+                      刪除
+                    </button>
+                  </div>
                 </div>
               ))}
+
               {(!sessions || sessions.length === 0) && (
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                   尚無紀錄
