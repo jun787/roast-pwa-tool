@@ -41,53 +41,116 @@ function timeAtTemp(series, temp, endCapSec) {
   return null;
 }
 
-/* ===== 你的預測曲線（維持原樣）：TP → 末端（1s step） =====
-   注意：fcTime = 總烘焙時間；尾點 BT 對齊 dropTemp（下豆） */
+// 以「二次函數 ROR」產生曲線：同時滿足開頭/末端 ROR 與積分總量（= 下豆溫 - TP溫）
+// 若不單調（極端參數），則 fallback 為線性 ROR（仍滿足開/末端，但不再強制命中 dropTemp）
 function generateCurve6({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp,
+  fcTemp,     // 這個目前只用來做階段比例計算，不會硬性約束 ROR
   rorStart,
   rorFC,
   dropTemp,
 }) {
-  const dt = 1;
-  const n = Math.max(1, Math.round(fcTime / dt));
+  const dt = 1;                           // 1 秒解析度
+  const T = Math.max(1, fcTime - tpTime); // 模型作用範圍：TP → 末端
+  const deltaNeeded = (dropTemp - tpTemp); // 需要累積的總溫升（°C）
+
+  // —— 求二次函數係數：ROR(t) = a*t^2 + b*t + c，其中 t=0..T（把 TP 當作 t=0）
+  // 條件：
+  // (1) ROR(0) = c = rorStart
+  // (2) ROR(T) = a T^2 + b T + c = rorFC
+  // (3) ∫_0^T ROR(t) dt / 60 = deltaNeeded   （/60 因為 ROR 是 °C/分）
+  // 由 (2)(3) 解 a,b，c=rorStart
+  const c = rorStart;
+  const D1 = rorFC - c;
+
+  // a = 6 [ T( D1/2 + c ) - 60*delta ] / T^3
+  const a = (6 * (T * (D1 / 2 + c) - 60 * deltaNeeded)) / (T * T * T);
+  // b = D1/T - a T
+  const b = D1 / T - a * T;
+
+  // 生成 ROR/BT 序列
   const pts = [];
   let bt = tpTemp;
 
-  for (let i = 0; i <= n; i++) {
-    const t = i * dt;
-    let ror;
-    if (t < tpTime) {
-      const frac = t / Math.max(1, tpTime);
-      ror = rorStart * 0.6 * frac;
-      bt = tpTemp - rorStart * 0.2 * ((tpTime - t) / 60);
-    } else {
-      const f = (t - tpTime) / Math.max(1, fcTime - tpTime);
-      ror = rorStart + (rorFC - rorStart) * Math.max(0, Math.min(1, f));
-      bt += (ror / 60) * dt;
-    }
+  // 檢查單調遞減（理想狀況下 ROR 應該逐步下降）
+  let isMonotone = true;
+  let prevRor = Infinity;
+
+  for (let i = 0; i <= T; i += dt) {
+    const t = i; // 以 TP 為 0
+    let ror = a * t * t + b * t + c;      // °C/分
+    // 物理下限：不要負 ROR（極端情況）
+    if (ror < 0) ror = 0;
+
+    if (ror > prevRor + 1e-6) isMonotone = false;
+    prevRor = ror;
+
+    // 積分：每秒增加 ror/60（°C）
+    bt += (ror / 60) * dt;
+
     pts.push({
-      t,
+      t: tpTime + i,
       bt: Number(bt.toFixed(2)),
-      ror: Number((ror || 0).toFixed(2)),
+      ror: Number(ror.toFixed(2)),
     });
   }
 
-  if (pts.length && Number.isFinite(dropTemp)) {
-    const last = pts[pts.length - 1];
-    const delta = dropTemp - last.bt;
-    if (Math.abs(delta) > 0.3) {
-      for (let i = 0; i < pts.length; i++) {
-        const w = i / Math.max(1, pts.length - 1);
-        pts[i].bt = Number((pts[i].bt + delta * w).toFixed(2));
+  // 若非單調（極端參數：例如 rorStart 與 rorFC 差很大、但 deltaNeeded 又太小/太大）
+  // 則 fallback：使用「線性 ROR」保證穩定與可預期；但不再強制命中 dropTemp（會接近）
+  if (!isMonotone) {
+    const ptsLin = [];
+    let bt2 = tpTemp;
+    for (let i = 0; i <= T; i += dt) {
+      const t = i;
+      const rorLin = c + (D1 * t) / T; // 線性從 rorStart 減到 rorFC
+      bt2 += (rorLin / 60) * dt;
+      ptsLin.push({
+        t: tpTime + i,
+        bt: Number(bt2.toFixed(2)),
+        ror: Number(rorLin.toFixed(2)),
+      });
+    }
+    return ptsLin;
+  }
+
+  // 正常路徑：二次 ROR 已同時滿足開/末端與下豆溫（數值誤差在 0.1°C 內）
+  // 最後保險：若數值誤差略大（浮點誤差級），做一次極小幅度等比微調，避免破相
+  const last = pts[pts.length - 1];
+  const err = dropTemp - last.bt;
+  if (Math.abs(err) > 0.2) {
+    // 以尾段輕微分配（小於 0.2°C 一般不必動）
+    const tail = Math.min(120, T);
+    let weightSum = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].t >= fcTime - tail) {
+        const w = (pts[i].t - (fcTime - tail)) / tail;
+        weightSum += w;
+      }
+    }
+    const perW = weightSum ? err / weightSum : 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].t >= fcTime - tail) {
+        const w = (pts[i].t - (fcTime - tail)) / tail;
+        pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
+      }
+    }
+    // 用調整後 BT 反推 ROR，保持一致
+    for (let i = 0; i < pts.length; i++) {
+      if (i === 0) {
+        const next = pts[i + 1] || pts[i];
+        pts[i].ror = Number(((next.bt - pts[i].bt) * 60).toFixed(2));
+      } else {
+        const prev = pts[i - 1];
+        pts[i].ror = Number(((pts[i].bt - prev.bt) * 60).toFixed(2));
       }
     }
   }
+
   return pts;
 }
+
 
 export default function App() {
   useEffect(() => {
