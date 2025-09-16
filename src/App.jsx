@@ -149,42 +149,6 @@ function generateCurveStable({
 }
 
 
-  // 正常路徑：二次 ROR 已同時滿足開/末端與下豆溫（數值誤差在 0.1°C 內）
-  // 最後保險：若數值誤差略大（浮點誤差級），做一次極小幅度等比微調，避免破相
-  const last = pts[pts.length - 1];
-  const err = dropTemp - last.bt;
-  if (Math.abs(err) > 0.2) {
-    // 以尾段輕微分配（小於 0.2°C 一般不必動）
-    const tail = Math.min(120, T);
-    let weightSum = 0;
-    for (let i = 0; i < pts.length; i++) {
-      if (pts[i].t >= fcTime - tail) {
-        const w = (pts[i].t - (fcTime - tail)) / tail;
-        weightSum += w;
-      }
-    }
-    const perW = weightSum ? err / weightSum : 0;
-    for (let i = 0; i < pts.length; i++) {
-      if (pts[i].t >= fcTime - tail) {
-        const w = (pts[i].t - (fcTime - tail)) / tail;
-        pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
-      }
-    }
-    // 用調整後 BT 反推 ROR，保持一致
-    for (let i = 0; i < pts.length; i++) {
-      if (i === 0) {
-        const next = pts[i + 1] || pts[i];
-        pts[i].ror = Number(((next.bt - pts[i].bt) * 60).toFixed(2));
-      } else {
-        const prev = pts[i - 1];
-        pts[i].ror = Number(((pts[i].bt - prev.bt) * 60).toFixed(2));
-      }
-    }
-  }
-
-  return pts;
-}
-
 
 export default function App() {
   useEffect(() => {
