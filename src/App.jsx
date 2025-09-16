@@ -41,79 +41,113 @@ function timeAtTemp(series, temp, endCapSec) {
   return null;
 }
 
-// 以「二次函數 ROR」產生曲線：同時滿足開頭/末端 ROR 與積分總量（= 下豆溫 - TP溫）
-// 若不單調（極端參數），則 fallback 為線性 ROR（仍滿足開/末端，但不再強制命中 dropTemp）
-function generateCurve6({
+// 穩定版：端點 ROR 固定 + 積分精準命中 dropTemp + 單調下降
+function generateCurveStable({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp,     // 這個目前只用來做階段比例計算，不會硬性約束 ROR
-  rorStart,
-  rorFC,
+  fcTemp,   // 只用於其他顯示，不介入 ROR 拟合
+  rorStart: rS,
+  rorFC: rF,
   dropTemp,
 }) {
-  const dt = 1;                           // 1 秒解析度
-  const T = Math.max(1, fcTime - tpTime); // 模型作用範圍：TP → 末端
-  const deltaNeeded = (dropTemp - tpTemp); // 需要累積的總溫升（°C）
+  const dt = 1;
+  const T = Math.max(1, Math.round(fcTime - tpTime)); // 模型區間長度（秒）
+  const delta = dropTemp - tpTemp;                     // 需要的總溫升（°C）
+  const Ravg = (60 * delta) / T;                       // 期望平均 ROR（°C/分）
 
-  // —— 求二次函數係數：ROR(t) = a*t^2 + b*t + c，其中 t=0..T（把 TP 當作 t=0）
-  // 條件：
-  // (1) ROR(0) = c = rorStart
-  // (2) ROR(T) = a T^2 + b T + c = rorFC
-  // (3) ∫_0^T ROR(t) dt / 60 = deltaNeeded   （/60 因為 ROR 是 °C/分）
-  // 由 (2)(3) 解 a,b，c=rorStart
-  const c = rorStart;
-  const D1 = rorFC - c;
-
-  // a = 6 [ T( D1/2 + c ) - 60*delta ] / T^3
-  const a = (6 * (T * (D1 / 2 + c) - 60 * deltaNeeded)) / (T * T * T);
-  // b = D1/T - a T
-  const b = D1 / T - a * T;
-
-  // 生成 ROR/BT 序列
-  const pts = [];
+  // 邊界：如果 rS == rF，就用常數 ROR；否則用冪次衰減擬合 k
+  let pts = [];
   let bt = tpTemp;
 
-  // 檢查單調遞減（理想狀況下 ROR 應該逐步下降）
-  let isMonotone = true;
-  let prevRor = Infinity;
-
-  for (let i = 0; i <= T; i += dt) {
-    const t = i; // 以 TP 為 0
-    let ror = a * t * t + b * t + c;      // °C/分
-    // 物理下限：不要負 ROR（極端情況）
-    if (ror < 0) ror = 0;
-
-    if (ror > prevRor + 1e-6) isMonotone = false;
-    prevRor = ror;
-
-    // 積分：每秒增加 ror/60（°C）
-    bt += (ror / 60) * dt;
-
-    pts.push({
-      t: tpTime + i,
-      bt: Number(bt.toFixed(2)),
-      ror: Number(ror.toFixed(2)),
-    });
+  // 輔助：用目標平均 ROR 反推 k，令 ROR(u) = rF + (rS - rF)*(1-u)^k
+  function solveK(rS, rF, Ravg) {
+    const denom = (rS - rF);
+    if (Math.abs(denom) < 1e-9) return Infinity; // 表示常數 ROR
+    const A = (Ravg - rF) / denom;               // 期望的積分係數 1/(k+1)
+    // 若 A 不在 (0,1]，代表 Ravg 超出端點範圍，退回線性（再以比例微調）
+    if (!(A > 0 && A <= 1)) return null;
+    return (1 / A) - 1;                           // k >= 0 → 單調下降
   }
 
-  // 若非單調（極端參數：例如 rorStart 與 rorFC 差很大、但 deltaNeeded 又太小/太大）
-  // 則 fallback：使用「線性 ROR」保證穩定與可預期；但不再強制命中 dropTemp（會接近）
-  if (!isMonotone) {
-    const ptsLin = [];
-    let bt2 = tpTemp;
+  const k = solveK(rS, rF, Ravg);
+
+  // 方案 1：rS == rF 或 k == Infinity → 常數 ROR
+  if (k === Infinity) {
+    const r = Math.max(0, rS);
     for (let i = 0; i <= T; i += dt) {
-      const t = i;
-      const rorLin = c + (D1 * t) / T; // 線性從 rorStart 減到 rorFC
-      bt2 += (rorLin / 60) * dt;
-      ptsLin.push({
-        t: tpTime + i,
-        bt: Number(bt2.toFixed(2)),
-        ror: Number(rorLin.toFixed(2)),
-      });
+      bt += (r / 60) * dt;
+      pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
     }
-    return ptsLin;
+    return pts;
   }
+
+  // 方案 2：k 可解（A 在 (0,1]）→ 冪次衰減，端點正確 + 積分精準
+  if (k != null) {
+    for (let i = 0; i <= T; i += dt) {
+      const u = i / T;                                       // 0..1
+      const r = Math.max(0, rF + (rS - rF) * Math.pow(1 - u, k));
+      bt += (r / 60) * dt;
+      pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
+    }
+    // 數值保險：最後一點貼 dropTemp（浮點誤差級）
+    const last = pts.length - 1;
+    const err = dropTemp - pts[last].bt;
+    if (Math.abs(err) > 0.05) {
+      const tail = Math.min(60, T); // 只在最後 60s 極小微調 BT，不動 ROR 端點
+      let sumW = 0;
+      for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) sumW += (pts[i].t - (fcTime - tail)) / tail;
+      const perW = sumW ? (err / sumW) : 0;
+      for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) {
+        const w = (pts[i].t - (fcTime - tail)) / tail;
+        pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
+      }
+      // 反推 ROR，使表格一致
+      for (let i = 0; i <= last; i++) {
+        const prev = i > 0 ? pts[i - 1] : pts[i];
+        const r = (pts[i].bt - prev.bt) * 60;
+        pts[i].ror = Number(r.toFixed(2));
+      }
+    }
+    return pts;
+  }
+
+  // 方案 3：Ravg 超出端點範圍（極端值）→ 線性 ROR + 全域比例縮放使平均吻合
+  // 線性：ROR(u) = rS + (rF - rS)*u
+  // 先算出原始平均，再按比例把 (rS, rF) 平移/縮放，確保最終平均=Ravg，且不為負
+  const baseAvg = (rS + rF) / 2;
+  const scale = baseAvg === 0 ? 1 : (Ravg / baseAvg);
+  const rS2 = Math.max(0, rS * scale);
+  const rF2 = Math.max(0, rF * scale);
+
+  bt = tpTemp;
+  for (let i = 0; i <= T; i += dt) {
+    const u = i / T;
+    const r = rS2 + (rF2 - rS2) * u;
+    bt += (r / 60) * dt;
+    pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
+  }
+  // 最後再把末點微調到 dropTemp（僅 BT，並用差分回填 ROR）
+  const last = pts.length - 1;
+  const err = dropTemp - pts[last].bt;
+  if (Math.abs(err) > 0.05) {
+    const tail = Math.min(60, T);
+    let sumW = 0;
+    for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) sumW += (pts[i].t - (fcTime - tail)) / tail;
+    const perW = sumW ? (err / sumW) : 0;
+    for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) {
+      const w = (pts[i].t - (fcTime - tail)) / tail;
+      pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
+    }
+    for (let i = 0; i <= last; i++) {
+      const prev = i > 0 ? pts[i - 1] : pts[i];
+      const r = (pts[i].bt - prev.bt) * 60;
+      pts[i].ror = Number(r.toFixed(2));
+    }
+  }
+  return pts;
+}
+
 
   // 正常路徑：二次 ROR 已同時滿足開/末端與下豆溫（數值誤差在 0.1°C 內）
   // 最後保險：若數值誤差略大（浮點誤差級），做一次極小幅度等比微調，避免破相
@@ -311,7 +345,7 @@ export default function App() {
   const [actualTemp, setActualTemp] = useState('');
 
   /* 產生/更新曲線（只有按按鈕才更新） */
-  const data = useMemo(() => generateCurve6(applied), [applied]);
+  const data = useMemo(() => generateCurveStable(applied), [applied]);
 
   // 只取 TP 之後
   const chartData = useMemo(
