@@ -41,110 +41,91 @@ function timeAtTemp(series, temp, endCapSec) {
   return null;
 }
 
-// 穩定版：端點 ROR 固定 + 積分精準命中 dropTemp + 單調下降
+// 穩定下降版：三次樣條 ROR（端點固定、尾端貼平）＋ 單調校正（嚴格不回升）
 function generateCurveStable({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp,   // 只用於其他顯示，不介入 ROR 拟合
+  fcTemp, // 只作顯示，這裡不參與 ROR 拟合
   rorStart: rS,
   rorFC: rF,
   dropTemp,
 }) {
   const dt = 1;
-  const T = Math.max(1, Math.round(fcTime - tpTime)); // 模型區間長度（秒）
-  const delta = dropTemp - tpTemp;                     // 需要的總溫升（°C）
+  const T = Math.max(1, Math.round(fcTime - tpTime)); // 建模長度（秒）
+  const delta = dropTemp - tpTemp;                     // 需要的總升溫（°C）
   const Ravg = (60 * delta) / T;                       // 期望平均 ROR（°C/分）
 
-  // 邊界：如果 rS == rF，就用常數 ROR；否則用冪次衰減擬合 k
-  let pts = [];
-  let bt = tpTemp;
+  // --- 三次樣條形狀：R(u) = a u^3 + b u^2 + c u + d, u∈[0,1]
+  // 條件：R(0)=rS, R(1)=rF, R'(1)=0（尾端貼平）, ∫0..1 R = Ravg
+  // 求解得：
+  const a = 12 * Ravg - 8 * rF - 4 * rS;
+  const b = -24 * Ravg + 15 * rF + 9 * rS;
+  const c = 12 * Ravg - 6 * rF - 6 * rS;
+  const d = rS;
 
-  // 輔助：用目標平均 ROR 反推 k，令 ROR(u) = rF + (rS - rF)*(1-u)^k
-  function solveK(rS, rF, Ravg) {
-    const denom = (rS - rF);
-    if (Math.abs(denom) < 1e-9) return Infinity; // 表示常數 ROR
-    const A = (Ravg - rF) / denom;               // 期望的積分係數 1/(k+1)
-    // 若 A 不在 (0,1]，代表 Ravg 超出端點範圍，退回線性（再以比例微調）
-    if (!(A > 0 && A <= 1)) return null;
-    return (1 / A) - 1;                           // k >= 0 → 單調下降
-  }
-
-  const k = solveK(rS, rF, Ravg);
-
-  // 方案 1：rS == rF 或 k == Infinity → 常數 ROR
-  if (k === Infinity) {
-    const r = Math.max(0, rS);
-    for (let i = 0; i <= T; i += dt) {
-      bt += (r / 60) * dt;
-      pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
-    }
-    return pts;
-  }
-
-  // 方案 2：k 可解（A 在 (0,1]）→ 冪次衰減，端點正確 + 積分精準
-  if (k != null) {
-    for (let i = 0; i <= T; i += dt) {
-      const u = i / T;                                       // 0..1
-      const r = Math.max(0, rF + (rS - rF) * Math.pow(1 - u, k));
-      bt += (r / 60) * dt;
-      pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
-    }
-    // 數值保險：最後一點貼 dropTemp（浮點誤差級）
-    const last = pts.length - 1;
-    const err = dropTemp - pts[last].bt;
-    if (Math.abs(err) > 0.05) {
-      const tail = Math.min(60, T); // 只在最後 60s 極小微調 BT，不動 ROR 端點
-      let sumW = 0;
-      for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) sumW += (pts[i].t - (fcTime - tail)) / tail;
-      const perW = sumW ? (err / sumW) : 0;
-      for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) {
-        const w = (pts[i].t - (fcTime - tail)) / tail;
-        pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
-      }
-      // 反推 ROR，使表格一致
-      for (let i = 0; i <= last; i++) {
-        const prev = i > 0 ? pts[i - 1] : pts[i];
-        const r = (pts[i].bt - prev.bt) * 60;
-        pts[i].ror = Number(r.toFixed(2));
-      }
-    }
-    return pts;
-  }
-
-  // 方案 3：Ravg 超出端點範圍（極端值）→ 線性 ROR + 全域比例縮放使平均吻合
-  // 線性：ROR(u) = rS + (rF - rS)*u
-  // 先算出原始平均，再按比例把 (rS, rF) 平移/縮放，確保最終平均=Ravg，且不為負
-  const baseAvg = (rS + rF) / 2;
-  const scale = baseAvg === 0 ? 1 : (Ravg / baseAvg);
-  const rS2 = Math.max(0, rS * scale);
-  const rF2 = Math.max(0, rF * scale);
-
-  bt = tpTemp;
-  for (let i = 0; i <= T; i += dt) {
+  // --- 先按樣條生成 ROR，再做「單調不增」校正，杜絕任何上揚/末端墜落
+  const r = new Array(T + 1);
+  for (let i = 0; i <= T; i++) {
     const u = i / T;
-    const r = rS2 + (rF2 - rS2) * u;
-    bt += (r / 60) * dt;
-    pts.push({ t: tpTime + i, bt: Number(bt.toFixed(2)), ror: Number(r.toFixed(2)) });
+    const val = a * u * u * u + b * u * u + c * u + d;
+    r[i] = Math.max(0, val); // ROR 不為負
   }
-  // 最後再把末點微調到 dropTemp（僅 BT，並用差分回填 ROR）
-  const last = pts.length - 1;
-  const err = dropTemp - pts[last].bt;
-  if (Math.abs(err) > 0.05) {
+
+  // 單調不增濾波：任何上揚都壓平到前一點
+  for (let i = 1; i <= T; i++) {
+    if (r[i] > r[i - 1]) r[i] = r[i - 1];
+  }
+
+  // 尾端貼平到 rF（避免你說的「末端下墜」或偏離），以 30s 緩降貼合
+  const tailClampSec = Math.min(30, T);
+  const wantEnd = Math.max(0, rF);
+  const endDiff = r[T] - wantEnd;
+  if (Math.abs(endDiff) > 1e-6) {
+    const startIdx = Math.max(0, T - tailClampSec);
+    const span = T - startIdx || 1;
+    for (let i = startIdx; i <= T; i++) {
+      const w = (i - startIdx) / span; // 0→1
+      // 線性把尾段拉到 rF，同時保持不回升
+      r[i] = Math.min(r[i], r[T] - endDiff * w);
+    }
+    // 再次保證單調
+    for (let i = startIdx + 1; i <= T; i++) {
+      if (r[i] > r[i - 1]) r[i] = r[i - 1];
+    }
+    // 最終強制終點精準等於 rF
+    r[T] = wantEnd;
+    if (T >= 1 && r[T] > r[T - 1]) r[T] = r[T - 1];
+  }
+
+  // --- 由 ROR 積分出 BT（不做整條平移）
+  const pts = [];
+  let bt = tpTemp;
+  for (let i = 0; i <= T; i++) {
+    bt += (r[i] / 60) * dt; // 每秒積分
+    pts.push({
+      t: tpTime + i,
+      bt: Number(bt.toFixed(2)),
+      ror: Number(r[i].toFixed(2)),
+    });
+  }
+
+  // 末點與 dropTemp 的微小誤差（數值累積）用極小幅 BT 微調處理，不動 ROR 形狀
+  const lastIdx = pts.length - 1;
+  const err = dropTemp - pts[lastIdx].bt;
+  if (Math.abs(err) > 0.2) {
     const tail = Math.min(60, T);
-    let sumW = 0;
-    for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) sumW += (pts[i].t - (fcTime - tail)) / tail;
-    const perW = sumW ? (err / sumW) : 0;
-    for (let i = 0; i <= last; i++) if (pts[i].t >= fcTime - tail) {
-      const w = (pts[i].t - (fcTime - tail)) / tail;
+    const t0 = fcTime - tail;
+    let wsum = 0;
+    for (let i = 0; i <= lastIdx; i++) if (pts[i].t >= t0) wsum += (pts[i].t - t0) / tail;
+    const perW = wsum ? err / wsum : 0;
+    for (let i = 0; i <= lastIdx; i++) if (pts[i].t >= t0) {
+      const w = (pts[i].t - t0) / tail;
       pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
     }
-    for (let i = 0; i <= last; i++) {
-      const prev = i > 0 ? pts[i - 1] : pts[i];
-      const r = (pts[i].bt - prev.bt) * 60;
-      pts[i].ror = Number(r.toFixed(2));
-    }
+    // ROR 維持原單調結果，不重新回推（避免破壞「不回升」）
   }
+
   return pts;
 }
 
