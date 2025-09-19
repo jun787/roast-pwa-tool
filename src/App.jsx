@@ -41,68 +41,78 @@ function timeAtTemp(series, temp, endCapSec) {
   return null;
 }
 
-// 穩定下降版：三次樣條 ROR（端點固定、尾端貼平）＋ 單調校正（嚴格不回升）
+// 單調指數族（端點正確、整段單調、以「離散平均」解參數使積分命中 drop）
 function generateCurveStable({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp, // 只作顯示，這裡不參與 ROR 拟合
+  fcTemp,   // 只用在別處顯示，不參與曲線求解
   rorStart: rS,
   rorFC: rF,
   dropTemp,
 }) {
-  const dt = 1;
   const T = Math.max(1, Math.round(fcTime - tpTime)); // 建模長度（秒）
   const delta = dropTemp - tpTemp;                     // 需要的總升溫（°C）
   const Ravg = (60 * delta) / T;                       // 期望平均 ROR（°C/分）
+  // 可行性前置：平均需介於端點之間（不在範圍時，仍會產生單調曲線，但可能與 drop 有微差）
+  const A = (Ravg - rF) / (rS - rF);                   // 目標：離散平均的比例係數
 
-  // --- 三次樣條形狀：R(u) = a u^3 + b u^2 + c u + d, u∈[0,1]
-  // 條件：R(0)=rS, R(1)=rF, R'(1)=0（尾端貼平）, ∫0..1 R = Ravg
-  // 求解得：
-  const a = 12 * Ravg - 8 * rF - 4 * rS;
-  const b = -24 * Ravg + 15 * rF + 9 * rS;
-  const c = 12 * Ravg - 6 * rF - 6 * rS;
-  const d = rS;
+  // E(u) = (e^{-k u} - e^{-k}) / (1 - e^{-k})，保證 E(0)=1, E(1)=0，嚴格遞減
+  function discreteAvgE(k) {
+    const ek = Math.exp(-k);
+    const denom = 1 - ek;
+    let sum = 0;
+    for (let i = 0; i < T; i++) {
+      const u = i / T;
+      sum += (Math.exp(-k * u) - ek) / denom;
+    }
+    return sum / T;
+  }
 
-  // --- 先按樣條生成 ROR，再做「單調不增」校正，杜絕任何上揚/末端墜落
+  // 用二分在 k 的一側求根：A>0.5 → k<0；A<0.5 → k>0；A≈0.5 → k≈0
+  function solveK(A) {
+    if (!Number.isFinite(A)) return 0;           // 保底
+    if (A <= 1e-6) return 20;                    // 幾乎全靠尾段
+    if (A >= 1 - 1e-6) return -20;               // 幾乎全靠前段
+    let lo, hi;
+    if (A > 0.5) { lo = -30; hi = -1e-8; }      // 負區間
+    else         { lo =  1e-8; hi =  30; }      // 正區間
+    let flo = discreteAvgE(lo) - A;
+    let fhi = discreteAvgE(hi) - A;
+    // 二分
+    for (let it = 0; it < 120; it++) {
+      const mid = (lo + hi) / 2;
+      const fmid = discreteAvgE(mid) - A;
+      if (flo * fmid <= 0) { hi = mid; fhi = fmid; }
+      else                 { lo = mid; flo = fmid; }
+      if (Math.abs(hi - lo) < 1e-10) break;
+    }
+    return (lo + hi) / 2;
+  }
+
+  const k = solveK(A);
+  const ek = Math.exp(-k);
+  const denom = 1 - ek;
+
+  // 生成單調 ROR；理論上嚴格遞減，但為保守，仍做一次不回升壓平
   const r = new Array(T + 1);
   for (let i = 0; i <= T; i++) {
     const u = i / T;
-    const val = a * u * u * u + b * u * u + c * u + d;
-    r[i] = Math.max(0, val); // ROR 不為負
+    const E = (Math.exp(-k * u) - ek) / denom;    // 1 → 0
+    r[i] = Math.max(0, rF + (rS - rF) * E);
   }
-
-  // 單調不增濾波：任何上揚都壓平到前一點
-  for (let i = 1; i <= T; i++) {
+  for (let i = 1; i <= T; i++) {                  // 單調保險
     if (r[i] > r[i - 1]) r[i] = r[i - 1];
   }
+  // 終點精確貼 rF（避免尾端任何殘差）
+  r[T] = Math.min(r[T], Math.max(0, rF));
+  if (T >= 1 && r[T] > r[T - 1]) r[T] = r[T - 1];
 
-  // 尾端貼平到 rF（避免你說的「末端下墜」或偏離），以 30s 緩降貼合
-  const tailClampSec = Math.min(30, T);
-  const wantEnd = Math.max(0, rF);
-  const endDiff = r[T] - wantEnd;
-  if (Math.abs(endDiff) > 1e-6) {
-    const startIdx = Math.max(0, T - tailClampSec);
-    const span = T - startIdx || 1;
-    for (let i = startIdx; i <= T; i++) {
-      const w = (i - startIdx) / span; // 0→1
-      // 線性把尾段拉到 rF，同時保持不回升
-      r[i] = Math.min(r[i], r[T] - endDiff * w);
-    }
-    // 再次保證單調
-    for (let i = startIdx + 1; i <= T; i++) {
-      if (r[i] > r[i - 1]) r[i] = r[i - 1];
-    }
-    // 最終強制終點精準等於 rF
-    r[T] = wantEnd;
-    if (T >= 1 && r[T] > r[T - 1]) r[T] = r[T - 1];
-  }
-
-  // --- 由 ROR 積分出 BT（不做整條平移）
+  // 由 ROR 積分出 BT（採用「左矩形」T 次積分，和上面的離散平均相匹配）
   const pts = [];
   let bt = tpTemp;
   for (let i = 0; i <= T; i++) {
-    bt += (r[i] / 60) * dt; // 每秒積分
+    if (i < T) bt += r[i] / 60;                   // 積分 T 次（秒）
     pts.push({
       t: tpTime + i,
       bt: Number(bt.toFixed(2)),
@@ -110,25 +120,12 @@ function generateCurveStable({
     });
   }
 
-  // 末點與 dropTemp 的微小誤差（數值累積）用極小幅 BT 微調處理，不動 ROR 形狀
-  const lastIdx = pts.length - 1;
-  const err = dropTemp - pts[lastIdx].bt;
-  if (Math.abs(err) > 0.2) {
-    const tail = Math.min(60, T);
-    const t0 = fcTime - tail;
-    let wsum = 0;
-    for (let i = 0; i <= lastIdx; i++) if (pts[i].t >= t0) wsum += (pts[i].t - t0) / tail;
-    const perW = wsum ? err / wsum : 0;
-    for (let i = 0; i <= lastIdx; i++) if (pts[i].t >= t0) {
-      const w = (pts[i].t - t0) / tail;
-      pts[i].bt = Number((pts[i].bt + perW * w).toFixed(2));
-    }
-    // ROR 維持原單調結果，不重新回推（避免破壞「不回升」）
-  }
+  // 浮點/四捨五入造成的末點誤差通常 <0.2°C；若你堅持貼齊，可開下面微調 BT 的段落（不改 ROR）
+  // const err = dropTemp - pts[pts.length - 1].bt;
+  // if (Math.abs(err) > 0.2) { /* 尾段極小幅 BT 線性補償，不動 r[] */ }
 
   return pts;
 }
-
 
 
 export default function App() {
