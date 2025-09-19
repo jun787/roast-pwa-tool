@@ -41,12 +41,12 @@ function timeAtTemp(series, temp, endCapSec) {
   return null;
 }
 
-// 單調指數族（端點正確、整段單調、以「離散平均」解參數使積分命中 drop）
+// 單調指數族（端點正確、整段單調、以「離散平均」解參數使積分命中 drop）+ btExact 同步
 function generateCurveStable({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp,   // 只用在別處顯示，不參與曲線求解
+  fcTemp,   // 僅顯示，不參與求解
   rorStart: rS,
   rorFC: rF,
   dropTemp,
@@ -54,8 +54,8 @@ function generateCurveStable({
   const T = Math.max(1, Math.round(fcTime - tpTime)); // 建模長度（秒）
   const delta = dropTemp - tpTemp;                     // 需要的總升溫（°C）
   const Ravg = (60 * delta) / T;                       // 期望平均 ROR（°C/分）
-  // 可行性前置：平均需介於端點之間（不在範圍時，仍會產生單調曲線，但可能與 drop 有微差）
-  const A = (Ravg - rF) / (rS - rF);                   // 目標：離散平均的比例係數
+  const span = (rS - rF);
+  const A = span === 0 ? 0.5 : (Ravg - rF) / span;     // 目標離散平均係數，理想在 (0,1)
 
   // E(u) = (e^{-k u} - e^{-k}) / (1 - e^{-k})，保證 E(0)=1, E(1)=0，嚴格遞減
   function discreteAvgE(k) {
@@ -69,60 +69,104 @@ function generateCurveStable({
     return sum / T;
   }
 
-  // 用二分在 k 的一側求根：A>0.5 → k<0；A<0.5 → k>0；A≈0.5 → k≈0
+  // 穩健二分解 k：自動擴張區間以涵蓋根（避免 A 很接近 0 或 1 時取不到號差）
   function solveK(A) {
-    if (!Number.isFinite(A)) return 0;           // 保底
-    if (A <= 1e-6) return 20;                    // 幾乎全靠尾段
-    if (A >= 1 - 1e-6) return -20;               // 幾乎全靠前段
-    let lo, hi;
-    if (A > 0.5) { lo = -30; hi = -1e-8; }      // 負區間
-    else         { lo =  1e-8; hi =  30; }      // 正區間
+    if (!Number.isFinite(A)) return 0;
+    if (A <= 1e-9) return 60;          // 幾乎全尾段
+    if (A >= 1 - 1e-9) return -60;     // 幾乎全前段
+
+    let lo = (A > 0.5) ? -60 : 1e-6;   // A>0.5 → k<0；A<0.5 → k>0
+    let hi = (A > 0.5) ? -1e-6 : 60;
+
     let flo = discreteAvgE(lo) - A;
     let fhi = discreteAvgE(hi) - A;
+
+    // 擴張到有號差或到極限
+    let expand = 0;
+    while (flo * fhi > 0 && expand < 6) {
+      if (A > 0.5) lo *= 2; else hi *= 2;
+      flo = discreteAvgE(lo) - A;
+      fhi = discreteAvgE(hi) - A;
+      expand++;
+    }
+
     // 二分
     for (let it = 0; it < 120; it++) {
       const mid = (lo + hi) / 2;
       const fmid = discreteAvgE(mid) - A;
       if (flo * fmid <= 0) { hi = mid; fhi = fmid; }
-      else                 { lo = mid; flo = fmid; }
+      else { lo = mid; flo = fmid; }
       if (Math.abs(hi - lo) < 1e-10) break;
     }
     return (lo + hi) / 2;
+  }
+
+  // 特例：rS==rF → 常數 ROR
+  if (Math.abs(span) < 1e-9) {
+    const rConst = Math.max(0, rS);
+    const ptsC = [];
+    let btExact = tpTemp;
+    for (let i = 0; i <= T; i++) {
+      if (i < T) btExact += rConst / 60;
+      const bt = Number(btExact.toFixed(2));
+      ptsC.push({ t: tpTime + i, bt, btExact, ror: Number(rConst.toFixed(2)) });
+    }
+    // 尾點極小誤差補償（不動 ROR）
+    const err = dropTemp - ptsC[ptsC.length - 1].btExact;
+    if (Math.abs(err) > 0.2) {
+      const tail = Math.min(60, T);
+      const t0 = fcTime - tail;
+      let wsum = 0;
+      for (let i = 0; i < ptsC.length; i++) if (ptsC[i].t >= t0) wsum += (ptsC[i].t - t0) / tail;
+      const perW = wsum ? err / wsum : 0;
+      for (let i = 0; i < ptsC.length; i++) if (ptsC[i].t >= t0) {
+        const w = (ptsC[i].t - t0) / tail;
+        ptsC[i].btExact = ptsC[i].btExact + perW * w;
+        ptsC[i].bt = Number(ptsC[i].btExact.toFixed(2));   // 同步 btExact → bt
+      }
+    }
+    return ptsC;
   }
 
   const k = solveK(A);
   const ek = Math.exp(-k);
   const denom = 1 - ek;
 
-  // 生成單調 ROR；理論上嚴格遞減，但為保守，仍做一次不回升壓平
+  // 生成單調 ROR；理論上嚴格遞減，但仍以「不回升壓平」保險
   const r = new Array(T + 1);
   for (let i = 0; i <= T; i++) {
     const u = i / T;
     const E = (Math.exp(-k * u) - ek) / denom;    // 1 → 0
-    r[i] = Math.max(0, rF + (rS - rF) * E);
+    r[i] = Math.max(0, rF + span * E);
   }
-  for (let i = 1; i <= T; i++) {                  // 單調保險
-    if (r[i] > r[i - 1]) r[i] = r[i - 1];
-  }
-  // 終點精確貼 rF（避免尾端任何殘差）
+  for (let i = 1; i <= T; i++) if (r[i] > r[i - 1]) r[i] = r[i - 1];
   r[T] = Math.min(r[T], Math.max(0, rF));
   if (T >= 1 && r[T] > r[T - 1]) r[T] = r[T - 1];
 
-  // 由 ROR 積分出 BT（採用「左矩形」T 次積分，和上面的離散平均相匹配）
+  // 由 ROR 積分出 BT（離散左矩形，與解 k 的方法匹配）
   const pts = [];
-  let bt = tpTemp;
+  let btExact = tpTemp;
   for (let i = 0; i <= T; i++) {
-    if (i < T) bt += r[i] / 60;                   // 積分 T 次（秒）
-    pts.push({
-      t: tpTime + i,
-      bt: Number(bt.toFixed(2)),
-      ror: Number(r[i].toFixed(2)),
-    });
+    if (i < T) btExact += r[i] / 60;
+    const bt = Number(btExact.toFixed(2));
+    pts.push({ t: tpTime + i, bt, btExact, ror: Number(r[i].toFixed(2)) });
   }
 
-  // 浮點/四捨五入造成的末點誤差通常 <0.2°C；若你堅持貼齊，可開下面微調 BT 的段落（不改 ROR）
-  // const err = dropTemp - pts[pts.length - 1].bt;
-  // if (Math.abs(err) > 0.2) { /* 尾段極小幅 BT 線性補償，不動 r[] */ }
+  // 尾點極小誤差補償（僅 BT，**同步 btExact**，不動 ROR）
+  const last = pts.length - 1;
+  const err = dropTemp - pts[last].btExact;
+  if (Math.abs(err) > 0.2) {
+    const tail = Math.min(60, T);
+    const t0 = fcTime - tail;
+    let wsum = 0;
+    for (let i = 0; i <= last; i++) if (pts[i].t >= t0) wsum += (pts[i].t - t0) / tail;
+    const perW = wsum ? err / wsum : 0;
+    for (let i = 0; i <= last; i++) if (pts[i].t >= t0) {
+      const w = (pts[i].t - t0) / tail;
+      pts[i].btExact = pts[i].btExact + perW * w;              // 同步精確值
+      pts[i].bt = Number(pts[i].btExact.toFixed(2));           // 再同步顯示值
+    }
+  }
 
   return pts;
 }
