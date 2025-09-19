@@ -46,16 +46,16 @@ function generateCurveStable({
   tpTime,
   tpTemp,
   fcTime,
-  fcTemp,   // 僅顯示，不參與求解
+  fcTemp, // 僅顯示，不參與求解
   rorStart: rS,
   rorFC: rF,
   dropTemp,
 }) {
   const T = Math.max(1, Math.round(fcTime - tpTime)); // 建模長度（秒）
-  const delta = dropTemp - tpTemp;                     // 需要的總升溫（°C）
-  const Ravg = (60 * delta) / T;                       // 期望平均 ROR（°C/分）
-  const span = (rS - rF);
-  const A = span === 0 ? 0.5 : (Ravg - rF) / span;     // 目標離散平均係數，理想在 (0,1)
+  const delta = dropTemp - tpTemp; // 需要的總升溫（°C）
+  const Ravg = (60 * delta) / T; // 期望平均 ROR（°C/分）
+  const span = rS - rF;
+  const A = span === 0 ? 0.5 : (Ravg - rF) / span; // 目標離散平均係數，理想在 (0,1)
 
   // E(u) = (e^{-k u} - e^{-k}) / (1 - e^{-k})，保證 E(0)=1, E(1)=0，嚴格遞減
   function discreteAvgE(k) {
@@ -72,11 +72,11 @@ function generateCurveStable({
   // 穩健二分解 k：自動擴張區間以涵蓋根（避免 A 很接近 0 或 1 時取不到號差）
   function solveK(A) {
     if (!Number.isFinite(A)) return 0;
-    if (A <= 1e-9) return 60;          // 幾乎全尾段
-    if (A >= 1 - 1e-9) return -60;     // 幾乎全前段
+    if (A <= 1e-9) return 60; // 幾乎全尾段
+    if (A >= 1 - 1e-9) return -60; // 幾乎全前段
 
-    let lo = (A > 0.5) ? -60 : 1e-6;   // A>0.5 → k<0；A<0.5 → k>0
-    let hi = (A > 0.5) ? -1e-6 : 60;
+    let lo = A > 0.5 ? -60 : 1e-6; // A>0.5 → k<0；A<0.5 → k>0
+    let hi = A > 0.5 ? -1e-6 : 60;
 
     let flo = discreteAvgE(lo) - A;
     let fhi = discreteAvgE(hi) - A;
@@ -84,7 +84,8 @@ function generateCurveStable({
     // 擴張到有號差或到極限
     let expand = 0;
     while (flo * fhi > 0 && expand < 6) {
-      if (A > 0.5) lo *= 2; else hi *= 2;
+      if (A > 0.5) lo *= 2;
+      else hi *= 2;
       flo = discreteAvgE(lo) - A;
       fhi = discreteAvgE(hi) - A;
       expand++;
@@ -94,8 +95,13 @@ function generateCurveStable({
     for (let it = 0; it < 120; it++) {
       const mid = (lo + hi) / 2;
       const fmid = discreteAvgE(mid) - A;
-      if (flo * fmid <= 0) { hi = mid; fhi = fmid; }
-      else { lo = mid; flo = fmid; }
+      if (flo * fmid <= 0) {
+        hi = mid;
+        fhi = fmid;
+      } else {
+        lo = mid;
+        flo = fmid;
+      }
       if (Math.abs(hi - lo) < 1e-10) break;
     }
     return (lo + hi) / 2;
@@ -117,13 +123,15 @@ function generateCurveStable({
       const tail = Math.min(60, T);
       const t0 = fcTime - tail;
       let wsum = 0;
-      for (let i = 0; i < ptsC.length; i++) if (ptsC[i].t >= t0) wsum += (ptsC[i].t - t0) / tail;
+      for (let i = 0; i < ptsC.length; i++)
+        if (ptsC[i].t >= t0) wsum += (ptsC[i].t - t0) / tail;
       const perW = wsum ? err / wsum : 0;
-      for (let i = 0; i < ptsC.length; i++) if (ptsC[i].t >= t0) {
-        const w = (ptsC[i].t - t0) / tail;
-        ptsC[i].btExact = ptsC[i].btExact + perW * w;
-        ptsC[i].bt = Number(ptsC[i].btExact.toFixed(2));   // 同步 btExact → bt
-      }
+      for (let i = 0; i < ptsC.length; i++)
+        if (ptsC[i].t >= t0) {
+          const w = (ptsC[i].t - t0) / tail;
+          ptsC[i].btExact = ptsC[i].btExact + perW * w;
+          ptsC[i].bt = Number(ptsC[i].btExact.toFixed(2)); // 同步 btExact → bt
+        }
     }
     return ptsC;
   }
@@ -136,7 +144,7 @@ function generateCurveStable({
   const r = new Array(T + 1);
   for (let i = 0; i <= T; i++) {
     const u = i / T;
-    const E = (Math.exp(-k * u) - ek) / denom;    // 1 → 0
+    const E = (Math.exp(-k * u) - ek) / denom; // 1 → 0
     r[i] = Math.max(0, rF + span * E);
   }
   for (let i = 1; i <= T; i++) if (r[i] > r[i - 1]) r[i] = r[i - 1];
@@ -159,18 +167,19 @@ function generateCurveStable({
     const tail = Math.min(60, T);
     const t0 = fcTime - tail;
     let wsum = 0;
-    for (let i = 0; i <= last; i++) if (pts[i].t >= t0) wsum += (pts[i].t - t0) / tail;
+    for (let i = 0; i <= last; i++)
+      if (pts[i].t >= t0) wsum += (pts[i].t - t0) / tail;
     const perW = wsum ? err / wsum : 0;
-    for (let i = 0; i <= last; i++) if (pts[i].t >= t0) {
-      const w = (pts[i].t - t0) / tail;
-      pts[i].btExact = pts[i].btExact + perW * w;              // 同步精確值
-      pts[i].bt = Number(pts[i].btExact.toFixed(2));           // 再同步顯示值
-    }
+    for (let i = 0; i <= last; i++)
+      if (pts[i].t >= t0) {
+        const w = (pts[i].t - t0) / tail;
+        pts[i].btExact = pts[i].btExact + perW * w; // 同步精確值
+        pts[i].bt = Number(pts[i].btExact.toFixed(2)); // 再同步顯示值
+      }
   }
 
   return pts;
 }
-
 
 export default function App() {
   useEffect(() => {
@@ -182,6 +191,44 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sessionName, setSessionName] = useState('');
   const drawerRef = useRef(null);
+
+  /* ===== 草稿參數（綁 input） ===== */
+  const [tpTime, setTpTime] = useState(60);
+  const [tpTemp, setTpTemp] = useState(100);
+  const [fcTime, setFcTime] = useState(450); // 總烘焙時間（秒）
+  const [fcTemp, setFcTemp] = useState(188); // 一爆溫度（°C）
+  const [dropTemp, setDropTemp] = useState(204); // 下豆溫度（°C）
+  const [rorStart, setRorStart] = useState(20); // 起始 ROR
+  const [rorFC, setRorFC] = useState(10); // 末端 ROR
+  const [yellowTemp, setYellowTemp] = useState(145);
+
+  /* 工具：數值夾限 + 一次性提示（按按鈕時才檢查） */
+  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const [applyNote, setApplyNote] = useState('');
+
+  /* 設定：節點（圖表） */
+  const [intervalSec, setIntervalSec] = useState(30);
+
+  /* 表格 ROR 單位（min / 30s） */
+  const [tableRorUnit, setTableRorUnit] = useState('min');
+
+  /* 實際紅點（只畫在圖上） */
+  const [actuals, setActuals] = useState([]); // { t, temp }
+  const [actualTimeSec, setActualTimeSec] = useState('');
+  const [actualTemp, setActualTemp] = useState('');
+
+  // 建議範圍計算：依 TP、Drop、fcTime、末端 ROR 推算初始 ROR 建議區間
+  const rorStartRange = useMemo(() => {
+    const T = Math.max(1, fcTime - tpTime);
+    const delta = dropTemp - tpTemp;
+    const Ravg = (60 * delta) / T;
+    const aL = 0.35,
+      aU = 0.65;
+    if (Ravg <= rorFC) return null;
+    const lo = rorFC + (Ravg - rorFC) / aU;
+    const hi = rorFC + (Ravg - rorFC) / aL;
+    return [lo.toFixed(1), hi.toFixed(1)];
+  }, [tpTime, tpTemp, fcTime, dropTemp, rorFC]);
 
   // ✅ 取代你原本的 2-4：iPhone 左緣滑出 / 抽屜內左滑關閉（安全版）
   useEffect(() => {
@@ -293,16 +340,6 @@ export default function App() {
     };
   }, []);
 
-  /* ===== 草稿參數（綁 input） ===== */
-  const [tpTime, setTpTime] = useState(60);
-  const [tpTemp, setTpTemp] = useState(100);
-  const [fcTime, setFcTime] = useState(450); // 總烘焙時間（秒）
-  const [fcTemp, setFcTemp] = useState(188); // 一爆溫度（°C）
-  const [dropTemp, setDropTemp] = useState(204); // 下豆溫度（°C）
-  const [rorStart, setRorStart] = useState(20); // 起始 ROR
-  const [rorFC, setRorFC] = useState(10); // 末端 ROR
-  const [yellowTemp, setYellowTemp] = useState(145);
-
   /* ===== 已套用參數（圖表/表格使用）——缺它會整頁炸掉！===== */
   const [applied, setApplied] = useState({
     tpTime: 60,
@@ -314,21 +351,6 @@ export default function App() {
     rorFC: 10,
     yellowTemp: 145,
   });
-
-  /* 工具：數值夾限 + 一次性提示（按按鈕時才檢查） */
-  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const [applyNote, setApplyNote] = useState('');
-
-  /* 設定：節點（圖表） */
-  const [intervalSec, setIntervalSec] = useState(30);
-
-  /* 表格 ROR 單位（min / 30s） */
-  const [tableRorUnit, setTableRorUnit] = useState('min');
-
-  /* 實際紅點（只畫在圖上） */
-  const [actuals, setActuals] = useState([]); // { t, temp }
-  const [actualTimeSec, setActualTimeSec] = useState('');
-  const [actualTemp, setActualTemp] = useState('');
 
   /* 產生/更新曲線（只有按按鈕才更新） */
   const data = useMemo(() => generateCurveStable(applied), [applied]);
@@ -723,10 +745,26 @@ export default function App() {
             onChange={setDropTemp}
           />
           <Field
-            label="初始 ROR（°C/分）"
+            label={
+              <>
+                初始 ROR（°C/分）
+                {rorStartRange && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--muted)',
+                      marginLeft: 6,
+                    }}
+                  >
+                    建議範圍：{rorStartRange[0]}–{rorStartRange[1]}
+                  </span>
+                )}
+              </>
+            }
             value={rorStart}
             onChange={setRorStart}
           />
+
           <div>
             <Field
               label="末端 ROR（°C/分）"
@@ -783,7 +821,7 @@ export default function App() {
           <div
             style={{
               display: 'flex',
-              height: 16,
+              height: 20,
               borderRadius: 8,
               overflow: 'hidden',
               border: '1px solid var(--border, #e5e7eb)',
@@ -805,8 +843,8 @@ export default function App() {
           <div
             style={{
               display: 'flex',
-              gap: 12,
-              marginTop: 6,
+              gap: 40,
+              marginTop: 4,
               fontSize: 12,
               color: 'var(--muted)',
             }}
@@ -870,7 +908,7 @@ export default function App() {
             />
             <div
               className="flexRow"
-              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+              style={{ display: 'flex', gap:0, flexWrap: 'wrap' }}
             >
               <button className="btnPrimary" onClick={addActual}>
                 加入實際點（紅色）

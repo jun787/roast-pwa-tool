@@ -60,7 +60,7 @@ body,
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 4px;
   margin-bottom: 12px;
 }
 @media (max-width: 640px) {
@@ -71,9 +71,9 @@ body,
 
 .controls {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  margin: 10px 0 16px 0;
+  margin: 5px 16px;
   flex-wrap: wrap;
 }
 .labelRow {
@@ -95,19 +95,19 @@ body,
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 14px;
+  padding: 8px;
+  margin-bottom: 10px;
 }
 .cardTitle {
   font-size: 14px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .gridThree {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 4px;
 }
 @media (max-width: 768px) {
   .gridThree {
@@ -133,8 +133,9 @@ body,
 
 .btnPrimary {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
+  font-size: 16px;
+  padding: 4px 14px;
+  border-radius: 10px;
   border: none;
   background: var(--primary);
   color: var(--primaryText);
@@ -354,4 +355,23 @@ body,
   width: 100%; /* 保持滿版 */
   padding: 8px 0; /* 比現在矮 */
   font-size: 14px;
+}
+
+.card + .card {
+  margin-top: 10px; /* 或你要的更小間距 */
+}
+
+.flexRow .btnPrimary,
+.flexRow .btnGhost {
+  margin: 6px 0; /* 或直接 margin:0; 依你想要的緊湊度 */
+}
+
+.btnGhost {
+  padding: 4px 8px;
+  font-size: 16px;
+  width: 100%;
+}
+
+input.input {
+  padding: 4px 12px !important;
 }
