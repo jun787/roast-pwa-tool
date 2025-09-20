@@ -399,20 +399,21 @@ export default function App() {
     [actuals]
   );
 
-  // 新增紅點
-  const addActual = () => {
-    const s = Number(actualTimeSec);
-    const T = Number(actualTemp);
-    if (!Number.isFinite(s) || !Number.isFinite(T)) return;
-    const clamped = clamp(s, applied.tpTime, applied.fcTime);
-    const aligned = clamped - (clamped % intervalSec);
-    setActuals((prev) => {
-      const others = prev.filter((x) => x.t !== aligned);
-      return [...others, { t: aligned, temp: T }];
-    });
-    setActualTimeSec('');
-    setActualTemp('');
-  };
+  // 允許任意秒數紅點；不對齊 intervalSec、不覆蓋舊點
+const addActual = () => {
+  const s = Number(actualTimeSec);
+  const T = Number(actualTemp);
+  if (!Number.isFinite(s) || !Number.isFinite(T)) return;
+
+  const clamped = clamp(s, applied.tpTime, applied.fcTime);
+  const t = Math.round(clamped * 10) / 10; // 可保留 0.1s 精度
+
+  setActuals(prev => [...prev, { t, temp: T }].sort((a, b) => a.t - b.t));
+
+  setActualTimeSec('');
+  setActualTemp('');
+};
+
 
   const undoActual = () => {
     setActuals((prev) => {
